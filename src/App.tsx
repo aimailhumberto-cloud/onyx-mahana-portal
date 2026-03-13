@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
 import ToursList from './components/ToursList'
+import CRMList from './components/CRMList'
+import AdminPanel from './components/AdminPanel'
 
 function App() {
   return (
@@ -10,8 +12,8 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="tours" element={<ToursList />} />
-          <Route path="crm" element={<ToursList />} />
-          <Route path="admin" element={<Dashboard />} />
+          <Route path="crm" element={<CRMList />} />
+          <Route path="admin" element={<AdminPanel />} />
         </Route>
       </Routes>
     </BrowserRouter>
