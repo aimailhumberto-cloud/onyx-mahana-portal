@@ -187,20 +187,79 @@ app.get('/api/all', (req, res) => {
   });
 });
 
-// Serve frontend (production or if dist exists)
-const distPath = path.join(__dirname, '../dist');
-const distExists = fs.existsSync(distPath);
+// Serve frontend - check multiple possible locations
+const possibleDistPaths = [
+  path.join(__dirname, '../dist'),
+  path.join(__dirname, '../../dist'),
+  path.join(process.cwd(), 'dist'),
+  '/app/dist'
+];
 
-if (process.env.NODE_ENV === 'production' || distExists) {
+let distPath = null;
+let distFound = false;
+
+for (const tryPath of possibleDistPaths) {
+  if (fs.existsSync(tryPath) && fs.existsSync(path.join(tryPath, 'index.html'))) {
+    distPath = tryPath;
+    distFound = true;
+    console.log(`📁 Frontend found at: ${distPath}`);
+    break;
+  }
+}
+
+// Log all possible paths for debugging
+console.log('🔍 Checking frontend paths:');
+possibleDistPaths.forEach(p => {
+  const exists = fs.existsSync(p);
+  const hasIndex = exists && fs.existsSync(path.join(p, 'index.html'));
+  console.log(`   ${p} - exists: ${exists}, has index.html: ${hasIndex}`);
+});
+
+if (distFound) {
+  const assetsPath = path.join(distPath, 'assets');
   console.log(`📁 Serving frontend from: ${distPath}`);
+  console.log(`📁 Assets path: ${assetsPath}`);
+  console.log(`📁 Assets exist: ${fs.existsSync(assetsPath)}`);
+  
+  // Serve static files from dist/assets
+  app.use('/assets', express.static(assetsPath));
+  
+  // Serve other static files from dist
   app.use(express.static(distPath));
+  
+  // SPA fallback - serve index.html for all non-API routes
   app.get('*', (req, res) => {
+    // Skip API routes
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    
     const indexPath = path.join(distPath, 'index.html');
+    
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
     } else {
-      res.status(404).json({ error: 'Frontend not found. Make sure to run npm run build first.' });
+      res.status(404).send(`
+        <html>
+          <body>
+            <h1>Frontend not found</h1>
+            <p>Dist path checked: ${distPath}</p>
+            <p>Make sure to run: <code>npm run build</code></p>
+          </body>
+        </html>
+      `);
     }
+  });
+} else {
+  console.log('⚠️ Frontend dist not found in any location. API-only mode.');
+  console.log('💡 To serve frontend, ensure dist folder exists.');
+  
+  // API-only mode - return 404 for non-API routes
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.status(404).json({ error: 'Frontend not available. API-only mode.' });
   });
 }
 
@@ -212,11 +271,6 @@ app.use((err, req, res, next) => {
       ? 'Something went wrong' 
       : err.message
   });
-});
-
-// Handle 404
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
 });
 
 // Handle uncaught exceptions
