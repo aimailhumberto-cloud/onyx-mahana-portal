@@ -120,10 +120,19 @@ app.get('/api/all', (req, res) => {
   });
 });
 
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production') {
+  const distPath = path.join(__dirname, '../dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 // Start server
 app.listen(PORT, () => {
-  console.log(`🚀 Mahana API running on http://localhost:${PORT}`);
-  console.log(`📊 Endpoints:`);
+  console.log(`🚀 Mahana Portal running on port ${PORT}`);
+  console.log(`📊 API Endpoints:`);
   console.log(`   GET  /api/status`);
   console.log(`   GET  /api/tours`);
   console.log(`   GET  /api/ventas-caracol`);

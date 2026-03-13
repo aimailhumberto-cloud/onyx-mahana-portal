@@ -1,11 +1,7 @@
 import { useState } from 'react'
 import { 
   Search, 
-  Filter, 
-  ChevronDown,
-  Calendar,
-  User,
-  DollarSign
+  Calendar
 } from 'lucide-react'
 
 const categories = [

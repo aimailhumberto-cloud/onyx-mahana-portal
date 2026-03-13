@@ -5,7 +5,6 @@ import {
   Building2, 
   Settings, 
   Menu,
-  X,
   Anchor
 } from 'lucide-react'
 import { useState } from 'react'
