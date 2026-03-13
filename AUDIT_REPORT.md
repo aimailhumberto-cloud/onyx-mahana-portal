@@ -24,11 +24,15 @@
 
 ### 🔴 Críticos -> Fixeados
 
-| # | Problema | Solución | Commit |
-|---|----------|----------|--------|
-| **C1** | Frontend desconectado | conectado a API real | f99d954 |
-| **C2** | URL hardcodeada localhost | `import.meta.env.VITE_API_URL` | f99d954 |
-| **C5** | Sin validación POST | Whitelist + sanitización | f99d954 |
+| # | Problema | Estado | Commit |
+|---|----------|--------|--------|
+| **C1** | Frontend desconectado | ✅ FIXED | f99d954 |
+| **C2** | URL hardcodeada localhost | ✅ FIXED | 71d17c4 |
+| **C5** | Sin validación POST | ✅ FIXED | f99d954 |
+| **P0-1** | TypeScript import conflicts | ✅ FIXED | 6d24c92 |
+| **P0-2** | Precios vacíos como string | ✅ FIXED | 6d24c92 |
+| **P0-3** | Falta Error Boundary | ✅ FIXED | 6d24c92 |
+| **P0-4** | Estados inconsistentes | ✅ FIXED | 6d24c92 |
 
 ### 🟠 Altos -> Fixeados
 
