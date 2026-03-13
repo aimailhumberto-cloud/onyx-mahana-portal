@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 server/node_modules/
+# Keep package-lock.json files
+!package-lock.json
+!server/package-lock.json
 
 # Build output
 dist/
