@@ -2,10 +2,12 @@ services:
   - type: web
     name: mahana-portal
     env: node
-    buildCommand: npm install && npm run build && cd server && npm install
+    buildCommand: npm ci && npm run build
     startCommand: node server/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3100
+      - key: ALLOWED_ORIGINS
+        value: "*"
