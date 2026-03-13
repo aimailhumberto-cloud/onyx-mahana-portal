@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// API URL - Local server (change to production URL when deployed)
-const API_URL = 'http://localhost:3100'
+// API URL - Configurable via environment variable
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3100'
 
 // Tipos
 export interface Tour {
@@ -49,7 +49,7 @@ export interface Dashboard {
 // Obtener todos los datos
 export async function getAllData() {
   try {
-    const response = await axios.get(API_URL, { params: { action: 'getAll' } })
+    const response = await axios.get(`${API_URL}/api/all`)
     return response.data
   } catch (error) {
     console.error('Error fetching all data:', error)
@@ -60,7 +60,7 @@ export async function getAllData() {
 // Obtener tours Mahana
 export async function getTours(): Promise<{ total: number; data: Tour[] }> {
   try {
-    const response = await axios.get(API_URL, { params: { action: 'getTours' } })
+    const response = await axios.get(`${API_URL}/api/tours`)
     return response.data
   } catch (error) {
     console.error('Error fetching tours:', error)
@@ -71,7 +71,7 @@ export async function getTours(): Promise<{ total: number; data: Tour[] }> {
 // Obtener ventas Caracol
 export async function getVentasCaracol(): Promise<{ total: number; data: Tour[] }> {
   try {
-    const response = await axios.get(API_URL, { params: { action: 'getVentasCaracol' } })
+    const response = await axios.get(`${API_URL}/api/ventas-caracol`)
     return response.data
   } catch (error) {
     console.error('Error fetching ventas caracol:', error)
@@ -82,7 +82,7 @@ export async function getVentasCaracol(): Promise<{ total: number; data: Tour[] 
 // Obtener CRM
 export async function getCRM(): Promise<{ total: number; data: CRMRequest[] }> {
   try {
-    const response = await axios.get(API_URL, { params: { action: 'getCRM' } })
+    const response = await axios.get(`${API_URL}/api/crm`)
     return response.data
   } catch (error) {
     console.error('Error fetching CRM:', error)
@@ -93,7 +93,7 @@ export async function getCRM(): Promise<{ total: number; data: CRMRequest[] }> {
 // Obtener dashboard
 export async function getDashboard(): Promise<Dashboard> {
   try {
-    const response = await axios.get(API_URL, { params: { action: 'getDashboard' } })
+    const response = await axios.get(`${API_URL}/api/dashboard`)
     return response.data
   } catch (error) {
     console.error('Error fetching dashboard:', error)
@@ -108,7 +108,7 @@ export async function getDashboard(): Promise<Dashboard> {
 // Agregar solicitud CRM
 export async function addCRMRequest(request: Partial<CRMRequest>): Promise<{ success: boolean; id?: string; message?: string }> {
   try {
-    const response = await axios.post(API_URL, { action: 'addCRM', ...request })
+    const response = await axios.post(`${API_URL}/api/crm`, request)
     return response.data
   } catch (error) {
     console.error('Error adding CRM request:', error)
@@ -119,7 +119,7 @@ export async function addCRMRequest(request: Partial<CRMRequest>): Promise<{ suc
 // Verificar estado de la API
 export async function checkAPIStatus(): Promise<{ status: string; message: string }> {
   try {
-    const response = await axios.get(API_URL, { params: { action: 'status' } })
+    const response = await axios.get(`${API_URL}/api/status`)
     return response.data
   } catch (error) {
     console.error('Error checking API status:', error)

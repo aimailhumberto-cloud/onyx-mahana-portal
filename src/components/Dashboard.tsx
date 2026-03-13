@@ -1,45 +1,16 @@
-import { 
-  Calendar, 
-  DollarSign, 
-  Clock, 
-  TrendingUp, 
+import { useEffect, useState } from 'react'
+import {
+  Calendar,
+  DollarSign,
+  Clock,
+  TrendingUp,
   TrendingDown,
-  ArrowRight
+  ArrowRight,
+  Loader2,
+  AlertCircle
 } from 'lucide-react'
-
-const stats = [
-  { 
-    label: 'Reservas Hoy', 
-    value: '12', 
-    change: 3, 
-    trend: 'up',
-    icon: Calendar,
-    color: 'bg-turquoise-500'
-  },
-  { 
-    label: 'Ingresos Mes', 
-    value: '$4,250', 
-    change: 12, 
-    trend: 'up',
-    icon: DollarSign,
-    color: 'bg-arena-500'
-  },
-  { 
-    label: 'Pendientes', 
-    value: '5', 
-    change: -2, 
-    trend: 'down',
-    icon: Clock,
-    color: 'bg-azul-600'
-  },
-]
-
-const recentReservations = [
-  { id: 1, client: 'Juan Pérez', activity: 'Surf 101', date: '2024-03-12', status: 'confirmada', amount: 55 },
-  { id: 2, client: 'María García', activity: 'Tour Cascadas', date: '2024-03-12', status: 'pendiente', amount: 120 },
-  { id: 3, client: 'Carlos López', activity: 'Day Pass Caracol', date: '2024-03-13', status: 'confirmada', amount: 30 },
-  { id: 4, client: 'Ana Martínez', activity: 'Kite Surf', date: '2024-03-13', status: 'cancelada', amount: 85 },
-]
+import { useApi } from '../hooks/useApi'
+import { getDashboard, getTours, Dashboard, Tour } from '../api/sheets'
 
 const statusColors: Record<string, string> = {
   confirmada: 'bg-turquoise-100 text-turquoise-700',
@@ -48,6 +19,104 @@ const statusColors: Record<string, string> = {
 }
 
 export default function Dashboard() {
+  const [stats, setStats] = useState([
+    { label: 'Reservas Hoy', value: '0', change: 0, trend: 'neutral' as 'up' | 'down' | 'neutral', icon: Calendar, color: 'bg-turquoise-500' },
+    { label: 'Ingresos Mes', value: '$0', change: 0, trend: 'neutral' as 'up' | 'down' | 'neutral', icon: DollarSign, color: 'bg-arena-500' },
+    { label: 'Pendientes', value: '0', change: 0, trend: 'neutral' as 'up' | 'down' | 'neutral', icon: Clock, color: 'bg-azul-600' },
+  ])
+
+  const [reservations, setReservations] = useState<
+    { id: number; client: string; activity: string; date: string; status: string; amount: number }[]
+  >([])
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const [dashboardData, toursData] = await Promise.all([
+          getDashboard(),
+          getTours(),
+        ])
+
+        // Mapear dashboard data a stats
+        setStats([
+          {
+            label: 'Reservas Hoy',
+            value: dashboardData.toursMahana.total.toString(),
+            change: 3,
+            trend: 'up' as const,
+            icon: Calendar,
+            color: 'bg-turquoise-500',
+          },
+          {
+            label: 'Ingresos Mes',
+            value: `$${dashboardData.toursMahana.ingresos.toLocaleString()}`,
+            change: 12,
+            trend: 'up' as const,
+            icon: DollarSign,
+            color: 'bg-arena-500',
+          },
+          {
+            label: 'Pendientes',
+            value: dashboardData.crm.pendientes.toString(),
+            change: -2,
+            trend: 'down' as const,
+            icon: Clock,
+            color: 'bg-azul-600',
+          },
+        ])
+
+        // Mapear tours a reservations
+        const formattedReservations = (toursData.data || []).slice(0, 4).map((tour, index) => ({
+          id: index,
+          client: tour.Cliente || 'Sin cliente',
+          activity: tour.Actividad || 'Sin actividad',
+          date: tour.Fecha || 'Sin fecha',
+          status: tour.Estatus?.toLowerCase() || 'pendiente',
+          amount: tour['Precio (Ingreso)'] || 0,
+        }))
+        setReservations(formattedReservations)
+      } catch (err) {
+        setError('Error al cargar los datos')
+        console.error('Error loading dashboard data:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-turquoise-600" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+        <div className="bg-red-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="w-8 h-8 text-red-600" />
+        </div>
+        <h3 className="text-lg font-semibold text-azul-900 mb-2">Error al cargar</h3>
+        <p className="text-gray-500 mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-turquoise-600 text-white rounded-lg hover:bg-turquoise-700"
+        >
+          Reintentar
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Stats Grid */}
@@ -66,12 +135,14 @@ export default function Dashboard() {
             <div className="flex items-center gap-1 mt-3">
               {stat.trend === 'up' ? (
                 <TrendingUp className="w-4 h-4 text-green-500" />
-              ) : (
+              ) : stat.trend === 'down' ? (
                 <TrendingDown className="w-4 h-4 text-red-500" />
+              ) : null}
+              {stat.trend !== 'neutral' && (
+                <span className={`text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                  {stat.change > 0 ? '+' : ''}{stat.change}% vs ayer
+                </span>
               )}
-              <span className={`text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
-                {stat.change > 0 ? '+' : ''}{stat.change}% vs ayer
-              </span>
             </div>
           </div>
         ))}
@@ -85,23 +156,31 @@ export default function Dashboard() {
             Ver todas <ArrowRight className="w-4 h-4" />
           </button>
         </div>
-        
+
         <div className="divide-y divide-gray-100">
-          {recentReservations.map((reservation) => (
-            <div key={reservation.id} className="px-6 py-4 flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-azul-900 truncate">{reservation.client}</p>
-                <p className="text-sm text-gray-500">{reservation.activity}</p>
+          {reservations.length > 0 ? (
+            reservations.map((reservation) => (
+              <div key={reservation.id} className="px-6 py-4 flex items-center justify-between">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-azul-900 truncate">{reservation.client}</p>
+                  <p className="text-sm text-gray-500">{reservation.activity}</p>
+                </div>
+                <div className="text-right mx-4">
+                  <p className="text-sm font-medium text-azul-900">${reservation.amount}</p>
+                  <p className="text-xs text-gray-400">{reservation.date}</p>
+                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[reservation.status] || statusColors['pendiente']}`}
+                >
+                  {reservation.status}
+                </span>
               </div>
-              <div className="text-right mx-4">
-                <p className="text-sm font-medium text-azul-900">${reservation.amount}</p>
-                <p className="text-xs text-gray-400">{reservation.date}</p>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[reservation.status]}`}>
-                {reservation.status}
-              </span>
+            ))
+          ) : (
+            <div className="px-6 py-8 text-center text-gray-500">
+              No hay reservas recientes
             </div>
-          ))}
+          )}
         </div>
       </div>
 

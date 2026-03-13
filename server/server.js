@@ -6,9 +6,49 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3100;
 
-// Middleware
-app.use(cors());
+// CORS Configuration - Only allow specific origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3100'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
+
+// Simple rate limiting (in-memory for now)
+const requestCounts = {};
+const RATE_LIMIT = 100; // requests per minute
+const RATE_WINDOW = 60 * 1000; // 1 minute
+
+app.use('/api/', (req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const now = Date.now();
+  
+  if (!requestCounts[ip]) {
+    requestCounts[ip] = { count: 1, startTime: now };
+  } else {
+    if (now - requestCounts[ip].startTime > RATE_WINDOW) {
+      requestCounts[ip] = { count: 1, startTime: now };
+    } else {
+      requestCounts[ip].count++;
+      if (requestCounts[ip].count > RATE_LIMIT) {
+        return res.status(429).json({ error: 'Too many requests, please try again later' });
+      }
+    }
+  }
+  next();
+});
 
 // Data paths
 const DATA_DIR = path.join(__dirname, '../data');
@@ -49,15 +89,42 @@ app.get('/api/crm', (req, res) => {
   res.json({ total: data.length, data: data });
 });
 
+// Allowed fields for CRM submission (whitelist)
+const CRM_ALLOWED_FIELDS = [
+  'Cliente', 'WhatsApp', 'Email', 'Propiedad', 'Tipo',
+  'Check-in', 'Check-out', 'Huéspedes', 'Habitaciones',
+  'Precio Cotizado', 'Responsable', 'Notas'
+];
+
+// Sanitize string input
+const sanitizeString = (str) => {
+  if (typeof str !== 'string') return '';
+  return str.slice(0, 1000).replace(/<[^>]*>/g, ''); // Remove HTML tags, limit length
+};
+
 app.post('/api/crm', (req, res) => {
   const crm = readJSON('crm.json');
   const newId = 'R' + String(crm.length + 1).padStart(3, '0');
+  
+  // Build sanitized object from allowed fields only
   const newItem = {
     ID: newId,
     'Fecha Solicitud': new Date().toISOString().split('T')[0],
-    ...req.body,
     Estado: '📥 Solicitada'
   };
+  
+  // Only copy allowed fields, sanitized
+  CRM_ALLOWED_FIELDS.forEach(field => {
+    if (req.body[field] !== undefined && req.body[field] !== null) {
+      newItem[field] = sanitizeString(String(req.body[field]));
+    }
+  });
+  
+  // Validate required fields
+  if (!newItem.Cliente && !newItem['Cliente']) {
+    return res.status(400).json({ error: 'Cliente es requerido' });
+  }
+  
   crm.push(newItem);
   writeJSON('crm.json', crm);
   res.json({ success: true, id: newId, data: newItem });
@@ -128,6 +195,31 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err.message);
+  res.status(err.status || 500).json({
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Something went wrong' 
+      : err.message
+  });
+});
+
+// Handle 404
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 // Start server
 app.listen(PORT, () => {
