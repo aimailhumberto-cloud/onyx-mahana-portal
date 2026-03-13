@@ -1,50 +1,128 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_GOOGLE_SCRIPT_URL || ''
+// API URL del Apps Script
+const API_URL = 'https://script.google.com/macros/s/AKfycbwOnWrO35Yy4NqxN1T9vA4iZsVsCm_s3e4ADrhsPgl9SldzoamWS_Dk8RvtFcl6OOoN/exec'
 
-export async function fetchReservations(): Promise<any[]> {
-  if (!API_URL) {
-    console.warn('API_URL not configured')
-    return []
-  }
-  
+// Tipos
+export interface Tour {
+  ID?: string
+  Fecha?: string
+  Hora?: string
+  Cliente?: string
+  Estatus?: string
+  Vendedor?: string
+  Actividad?: string
+  Responsable?: string
+  'Precio (Ingreso)'?: number
+  'Costo (Pago)'?: number
+  'Comisión (%)'?: number
+  'Monto Comisión'?: number
+  'Ganancia Mahana'?: number
+  Notas?: string
+  'Gestionado por'?: string
+}
+
+export interface CRMRequest {
+  ID?: string
+  'Fecha Solicitud'?: string
+  Cliente?: string
+  WhatsApp?: string
+  Email?: string
+  Propiedad?: string
+  Tipo?: string
+  'Check-in'?: string
+  'Check-out'?: string
+  Huéspedes?: string
+  Habitaciones?: string
+  'Precio Cotizado'?: string
+  Estado?: string
+  Responsable?: string
+  Notas?: string
+}
+
+export interface Dashboard {
+  toursMahana: { total: number; ingresos: number; ganancia: number }
+  ventasCaracol: { total: number; ingresos: number; comision: number }
+  crm: { total: number; pendientes: number; confirmadas: number }
+}
+
+// Obtener todos los datos
+export async function getAllData() {
   try {
-    const response = await axios.get(API_URL, {
-      params: { action: 'getReservations' }
-    })
+    const response = await axios.get(API_URL, { params: { action: 'getAll' } })
     return response.data
   } catch (error) {
-    console.error('Error fetching reservations:', error)
-    return []
+    console.error('Error fetching all data:', error)
+    return null
   }
 }
 
-export async function createReservation(reservation: any): Promise<boolean> {
-  if (!API_URL) {
-    console.warn('API_URL not configured')
-    return false
-  }
-  
+// Obtener tours Mahana
+export async function getTours(): Promise<{ total: number; data: Tour[] }> {
   try {
-    await axios.post(API_URL, { action: 'createReservation', data: reservation })
-    return true
+    const response = await axios.get(API_URL, { params: { action: 'getTours' } })
+    return response.data
   } catch (error) {
-    console.error('Error creating reservation:', error)
-    return false
+    console.error('Error fetching tours:', error)
+    return { total: 0, data: [] }
   }
 }
 
-export async function updateReservation(id: string, updates: any): Promise<boolean> {
-  if (!API_URL) {
-    console.warn('API_URL not configured')
-    return false
-  }
-  
+// Obtener ventas Caracol
+export async function getVentasCaracol(): Promise<{ total: number; data: Tour[] }> {
   try {
-    await axios.post(API_URL, { action: 'updateReservation', id, updates })
-    return true
+    const response = await axios.get(API_URL, { params: { action: 'getVentasCaracol' } })
+    return response.data
   } catch (error) {
-    console.error('Error updating reservation:', error)
-    return false
+    console.error('Error fetching ventas caracol:', error)
+    return { total: 0, data: [] }
+  }
+}
+
+// Obtener CRM
+export async function getCRM(): Promise<{ total: number; data: CRMRequest[] }> {
+  try {
+    const response = await axios.get(API_URL, { params: { action: 'getCRM' } })
+    return response.data
+  } catch (error) {
+    console.error('Error fetching CRM:', error)
+    return { total: 0, data: [] }
+  }
+}
+
+// Obtener dashboard
+export async function getDashboard(): Promise<Dashboard> {
+  try {
+    const response = await axios.get(API_URL, { params: { action: 'getDashboard' } })
+    return response.data
+  } catch (error) {
+    console.error('Error fetching dashboard:', error)
+    return {
+      toursMahana: { total: 0, ingresos: 0, ganancia: 0 },
+      ventasCaracol: { total: 0, ingresos: 0, comision: 0 },
+      crm: { total: 0, pendientes: 0, confirmadas: 0 }
+    }
+  }
+}
+
+// Agregar solicitud CRM
+export async function addCRMRequest(request: Partial<CRMRequest>): Promise<{ success: boolean; id?: string; message?: string }> {
+  try {
+    const response = await axios.post(API_URL, { action: 'addCRM', ...request })
+    return response.data
+  } catch (error) {
+    console.error('Error adding CRM request:', error)
+    return { success: false }
+  }
+}
+
+// Verificar estado de la API
+export async function checkAPIStatus(): Promise<{ status: string; message: string }> {
+  try {
+    const response = await axios.get(API_URL, { params: { action: 'status' } })
+    return response.data
+  } catch (error) {
+    console.error('Error checking API status:', error)
+    return { status: 'error', message: 'API no disponible' }
   }
 }
