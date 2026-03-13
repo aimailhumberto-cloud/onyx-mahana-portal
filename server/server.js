@@ -187,12 +187,20 @@ app.get('/api/all', (req, res) => {
   });
 });
 
-// Serve frontend in production
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../dist');
+// Serve frontend (production or if dist exists)
+const distPath = path.join(__dirname, '../dist');
+const distExists = fs.existsSync(distPath);
+
+if (process.env.NODE_ENV === 'production' || distExists) {
+  console.log(`📁 Serving frontend from: ${distPath}`);
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ error: 'Frontend not found. Make sure to run npm run build first.' });
+    }
   });
 }
 
