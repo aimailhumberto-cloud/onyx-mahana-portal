@@ -5,7 +5,6 @@ import {
   Building2,
   Users,
   TrendingUp,
-  TrendingDown,
   Download,
   RefreshCw,
   Loader2,
@@ -13,7 +12,8 @@ import {
   FileText,
   Clock
 } from 'lucide-react'
-import { getDashboard, getTours, Dashboard as DashboardType, Tour } from '../api/sheets'
+import { getDashboard, getTours } from '../api/sheets'
+import type { Dashboard, Tour } from '../api/sheets'
 
 interface Stat {
   label: string

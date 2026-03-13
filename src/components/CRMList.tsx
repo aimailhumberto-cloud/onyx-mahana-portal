@@ -5,13 +5,10 @@ import {
   Loader2,
   AlertCircle,
   Users,
-  BedDouble,
-  CheckCircle,
-  XCircle,
-  Mail,
-  Phone
+  BedDouble
 } from 'lucide-react'
-import { getCRM, CRMRequest } from '../api/sheets'
+import { getCRM } from '../api/sheets'
+import type { CRMRequest } from '../api/sheets'
 
 // Status colors - Spanish status from API
 const statusColors: Record<string, string> = {

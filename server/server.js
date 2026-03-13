@@ -125,12 +125,29 @@ app.get('/api/usuarios', (req, res) => {
   res.json({ total: 0, data: [] });
 });
 
+// Normalize empty strings to null/0 for calculations
+const normalizeValue = (value) => {
+  if (value === '' || value === null || value === undefined) return null
+  const num = parseFloat(value)
+  return isNaN(num) ? null : num
+}
+
+// Calculate sum, handling empty/null values
+const calcSum = (arr, field) => arr.reduce((sum, r) => {
+  const val = normalizeValue(r[field])
+  return sum + (val || 0)
+}, 0)
+
+// Count non-empty values
+const countValid = (arr, field) => arr.filter(r => {
+  const val = r[field]
+  return val !== '' && val !== null && val !== undefined
+}).length
+
 app.get('/api/dashboard', (req, res) => {
   const tours = readJSON('tours.json');
   const ventas = readJSON('ventas-caracol.json');
   const crm = readJSON('crm.json');
-
-  const calcSum = (arr, field) => arr.reduce((sum, r) => sum + (parseFloat(r[field]) || 0), 0);
 
   res.json({
     toursMahana: {

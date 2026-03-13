@@ -4,13 +4,12 @@ import {
   DollarSign,
   Clock,
   TrendingUp,
-  TrendingDown,
   ArrowRight,
   Loader2,
   AlertCircle
 } from 'lucide-react'
-import { useApi } from '../hooks/useApi'
-import { getDashboard, getTours, Dashboard, Tour } from '../api/sheets'
+import { getDashboard, getTours } from '../api/sheets'
+import type { Dashboard, Tour } from '../api/sheets'
 
 const statusColors: Record<string, string> = {
   confirmada: 'bg-turquoise-100 text-turquoise-700',
