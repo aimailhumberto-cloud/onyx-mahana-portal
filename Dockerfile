@@ -3,12 +3,16 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy root package files
 COPY package*.json ./
-COPY server/package*.json ./server/
+COPY package-lock.json ./
 
-# Install dependencies
-RUN npm ci && cd server && npm ci && cd ..
+# Install root dependencies
+RUN npm ci
+
+# Copy server package files and install
+COPY server/package*.json ./server/
+RUN cd server && npm ci && cd ..
 
 # Copy source code
 COPY . .
@@ -16,19 +20,26 @@ COPY . .
 # Build frontend
 RUN npm run build
 
+# Verify build
+RUN ls -la dist/ && ls -la dist/assets/
+
 # Production stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy server and data
+# Copy everything needed
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/data ./data
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
 
-# Install production dependencies only
+# Install server dependencies
 WORKDIR /app/server
 RUN npm ci --only=production
+
+# Go back to app root
+WORKDIR /app
 
 # Expose port
 EXPOSE 3100
@@ -37,5 +48,5 @@ EXPOSE 3100
 ENV NODE_ENV=production
 ENV PORT=3100
 
-# Start server
-CMD ["node", "server.js"]
+# Start server from app root
+CMD ["node", "server/server.js"]
