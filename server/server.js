@@ -6,19 +6,17 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3100;
 
-// CORS Configuration - Only allow specific origins
+// CORS Configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:3100'];
+  : ['*'];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true); // Allow all origins for now
     }
   },
   credentials: true
@@ -26,10 +24,10 @@ app.use(cors({
 
 app.use(express.json());
 
-// Simple rate limiting (in-memory for now)
+// Rate limiting
 const requestCounts = {};
-const RATE_LIMIT = 100; // requests per minute
-const RATE_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT = 100;
+const RATE_WINDOW = 60 * 1000;
 
 app.use('/api/', (req, res, next) => {
   const ip = req.ip || req.connection.remoteAddress;
@@ -43,7 +41,7 @@ app.use('/api/', (req, res, next) => {
     } else {
       requestCounts[ip].count++;
       if (requestCounts[ip].count > RATE_LIMIT) {
-        return res.status(429).json({ error: 'Too many requests, please try again later' });
+        return res.status(429).json({ error: 'Too many requests' });
       }
     }
   }
@@ -53,7 +51,6 @@ app.use('/api/', (req, res, next) => {
 // Data paths
 const DATA_DIR = path.join(__dirname, '../data');
 
-// Helper to read JSON
 const readJSON = (file) => {
   try {
     const data = fs.readFileSync(path.join(DATA_DIR, file), 'utf8');
@@ -64,14 +61,13 @@ const readJSON = (file) => {
   }
 };
 
-// Helper to write JSON
 const writeJSON = (file, data) => {
   fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
 };
 
-// Routes
+// API Routes - MUST come before static files
 app.get('/api/status', (req, res) => {
-  res.json({ status: 'ok', message: 'Mahana Portal API v1.0 (Local)', timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', message: 'Mahana Portal API v1.0', timestamp: new Date().toISOString() });
 });
 
 app.get('/api/tours', (req, res) => {
@@ -89,41 +85,32 @@ app.get('/api/crm', (req, res) => {
   res.json({ total: data.length, data: data });
 });
 
-// Allowed fields for CRM submission (whitelist)
 const CRM_ALLOWED_FIELDS = [
   'Cliente', 'WhatsApp', 'Email', 'Propiedad', 'Tipo',
   'Check-in', 'Check-out', 'Huéspedes', 'Habitaciones',
   'Precio Cotizado', 'Responsable', 'Notas'
 ];
 
-// Sanitize string input
 const sanitizeString = (str) => {
   if (typeof str !== 'string') return '';
-  return str.slice(0, 1000).replace(/<[^>]*>/g, ''); // Remove HTML tags, limit length
+  return str.slice(0, 1000).replace(/<[^>]*>/g, '');
 };
 
 app.post('/api/crm', (req, res) => {
   const crm = readJSON('crm.json');
   const newId = 'R' + String(crm.length + 1).padStart(3, '0');
   
-  // Build sanitized object from allowed fields only
   const newItem = {
     ID: newId,
     'Fecha Solicitud': new Date().toISOString().split('T')[0],
     Estado: '📥 Solicitada'
   };
   
-  // Only copy allowed fields, sanitized
   CRM_ALLOWED_FIELDS.forEach(field => {
     if (req.body[field] !== undefined && req.body[field] !== null) {
       newItem[field] = sanitizeString(String(req.body[field]));
     }
   });
-  
-  // Validate required fields
-  if (!newItem.Cliente && !newItem['Cliente']) {
-    return res.status(400).json({ error: 'Cliente es requerido' });
-  }
   
   crm.push(newItem);
   writeJSON('crm.json', crm);
@@ -131,13 +118,11 @@ app.post('/api/crm', (req, res) => {
 });
 
 app.get('/api/actividades', (req, res) => {
-  const data = readJSON('actividades.json');
-  res.json({ total: data.length, data: data });
+  res.json({ total: 0, data: [] });
 });
 
 app.get('/api/usuarios', (req, res) => {
-  const data = readJSON('usuarios.json');
-  res.json({ total: data.length, data: data });
+  res.json({ total: 0, data: [] });
 });
 
 app.get('/api/dashboard', (req, res) => {
@@ -170,130 +155,43 @@ app.get('/api/all', (req, res) => {
   res.json({
     tours: readJSON('tours.json'),
     ventasCaracol: readJSON('ventas-caracol.json'),
-    crm: readJSON('crm.json'),
-    actividades: readJSON('actividades.json'),
-    usuarios: readJSON('usuarios.json'),
-    dashboard: {
-      toursMahana: {
-        total: readJSON('tours.json').length,
-        ingresos: readJSON('tours.json').reduce((s, r) => s + (parseFloat(r['Precio (Ingreso)']) || 0), 0),
-        ganancia: readJSON('tours.json').reduce((s, r) => s + (parseFloat(r['Ganancia Mahana']) || 0), 0)
-      },
-      ventasCaracol: {
-        total: readJSON('ventas-caracol.json').length
-      },
-      crm: { total: readJSON('crm.json').length }
-    }
+    crm: readJSON('crm.json')
   });
 });
 
-// Serve frontend - check multiple possible locations
-const possibleDistPaths = [
-  path.join(__dirname, '../dist'),
-  path.join(__dirname, '../../dist'),
-  path.join(process.cwd(), 'dist'),
-  '/app/dist'
-];
+// Find dist directory
+const distPath = path.join(__dirname, '../dist');
+console.log('📁 Looking for dist at:', distPath);
+console.log('📁 Dist exists:', fs.existsSync(distPath));
+console.log('📁 Dist contents:', fs.existsSync(distPath) ? fs.readdirSync(distPath) : 'N/A');
 
-let distPath = null;
-let distFound = false;
-
-for (const tryPath of possibleDistPaths) {
-  if (fs.existsSync(tryPath) && fs.existsSync(path.join(tryPath, 'index.html'))) {
-    distPath = tryPath;
-    distFound = true;
-    console.log(`📁 Frontend found at: ${distPath}`);
-    break;
-  }
-}
-
-// Log all possible paths for debugging
-console.log('🔍 Checking frontend paths:');
-possibleDistPaths.forEach(p => {
-  const exists = fs.existsSync(p);
-  const hasIndex = exists && fs.existsSync(path.join(p, 'index.html'));
-  console.log(`   ${p} - exists: ${exists}, has index.html: ${hasIndex}`);
-});
-
-if (distFound) {
-  const assetsPath = path.join(distPath, 'assets');
-  console.log(`📁 Serving frontend from: ${distPath}`);
-  console.log(`📁 Assets path: ${assetsPath}`);
-  console.log(`📁 Assets exist: ${fs.existsSync(assetsPath)}`);
+if (fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'))) {
+  console.log('✅ Frontend found at:', distPath);
   
-  // Serve static files from dist/assets
-  app.use('/assets', express.static(assetsPath));
-  
-  // Serve other static files from dist
+  // Serve static files FIRST - this is critical
   app.use(express.static(distPath));
   
-  // SPA fallback - serve index.html for all non-API routes
+  // SPA fallback for ALL other routes (except /api/*)
   app.get('*', (req, res) => {
-    // Skip API routes
     if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
+      return res.status(404).json({ error: 'Not found' });
     }
-    
-    const indexPath = path.join(distPath, 'index.html');
-    
-    if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
-    } else {
-      res.status(404).send(`
-        <html>
-          <body>
-            <h1>Frontend not found</h1>
-            <p>Dist path checked: ${distPath}</p>
-            <p>Make sure to run: <code>npm run build</code></p>
-          </body>
-        </html>
-      `);
-    }
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
-  console.log('⚠️ Frontend dist not found in any location. API-only mode.');
-  console.log('💡 To serve frontend, ensure dist folder exists.');
-  
-  // API-only mode - return 404 for non-API routes
+  console.log('⚠️ Frontend not found. API-only mode.');
   app.get('*', (req, res) => {
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
-    }
-    res.status(404).json({ error: 'Frontend not available. API-only mode.' });
+    res.status(404).json({ error: 'Frontend not found' });
   });
 }
 
-// Global error handler
+// Error handler
 app.use((err, req, res, next) => {
   console.error('Error:', err.message);
-  res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production' 
-      ? 'Something went wrong' 
-      : err.message
-  });
+  res.status(500).json({ error: 'Internal server error' });
 });
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-// Start server
+// Start
 app.listen(PORT, () => {
   console.log(`🚀 Mahana Portal running on port ${PORT}`);
-  console.log(`📊 API Endpoints:`);
-  console.log(`   GET  /api/status`);
-  console.log(`   GET  /api/tours`);
-  console.log(`   GET  /api/ventas-caracol`);
-  console.log(`   GET  /api/crm`);
-  console.log(`   POST /api/crm`);
-  console.log(`   GET  /api/actividades`);
-  console.log(`   GET  /api/usuarios`);
-  console.log(`   GET  /api/dashboard`);
-  console.log(`   GET  /api/all`);
 });
