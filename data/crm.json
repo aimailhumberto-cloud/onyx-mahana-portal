@@ -1,0 +1,36 @@
+[
+  {
+    "ID": "R001",
+    "Fecha Solicitud": "2026-03-12",
+    "Cliente": "Madeleine",
+    "WhatsApp": "",
+    "Email": "",
+    "Propiedad": "Ventanas del Mar",
+    "Tipo": "Apartamentos",
+    "Check-in": "2026-03-21",
+    "Check-out": "2026-03-22",
+    "Huéspedes": "15-18",
+    "Habitaciones": "1",
+    "Precio Cotizado": "Por cotizar",
+    "Estado": "📥 Solicitada",
+    "Responsable": "Daniel",
+    "Notas": "Rancho de playa adicional"
+  },
+  {
+    "ID": "R002",
+    "Fecha Solicitud": "2026-03-12",
+    "Cliente": "Mariangel Saldarriaga + Paul Joel Espinosa",
+    "WhatsApp": "",
+    "Email": "",
+    "Propiedad": "Radisson Playa Caracol",
+    "Tipo": "Habitaciones",
+    "Check-in": "2026-03-20",
+    "Check-out": "2026-03-21",
+    "Huéspedes": "2",
+    "Habitaciones": "1",
+    "Precio Cotizado": "Por cotizar",
+    "Estado": "📥 Solicitada",
+    "Responsable": "Daniel",
+    "Notas": "⚠️ NO enviar precios a huéspedes"
+  }
+]

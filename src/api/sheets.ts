@@ -1,7 +1,7 @@
 import axios from 'axios'
 
-// API URL del Apps Script
-const API_URL = 'https://script.google.com/macros/s/AKfycbwOnWrO35Yy4NqxN1T9vA4iZsVsCm_s3e4ADrhsPgl9SldzoamWS_Dk8RvtFcl6OOoN/exec'
+// API URL - Local server (change to production URL when deployed)
+const API_URL = 'http://localhost:3100'
 
 // Tipos
 export interface Tour {

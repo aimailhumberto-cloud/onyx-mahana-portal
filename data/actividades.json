@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1,
+    "nombre": "Day Trip El Valle de Antón"
+  },
+  {
+    "id": 2,
+    "nombre": "Escápate a Isla Otoque y Bona"
+  },
+  {
+    "id": 3,
+    "nombre": "Hiking Cerro Chame"
+  },
+  {
+    "id": 4,
+    "nombre": "Mulita"
+  },
+  {
+    "id": 5,
+    "nombre": "Rafting Tubing Cajones"
+  },
+  {
+    "id": 6,
+    "nombre": "Rappel Cascada Filipinas"
+  },
+  {
+    "id": 7,
+    "nombre": "Surf 101"
+  },
+  {
+    "id": 8,
+    "nombre": "Tour Cascada Filipinas"
+  },
+  {
+    "id": 9,
+    "nombre": "Tour de Pesca Otoque y Bona"
+  },
+  {
+    "id": 10,
+    "nombre": "Tubing Inflable"
+  }
+]
