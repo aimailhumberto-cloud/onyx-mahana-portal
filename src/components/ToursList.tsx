@@ -1,255 +1,275 @@
 import { useState, useEffect } from 'react'
-import {
-  Search,
-  Calendar,
-  Loader2,
-  AlertCircle
-} from 'lucide-react'
-import { getTours, Tour } from '../api/sheets'
+import { useNavigate } from 'react-router-dom'
+import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, Clock, DollarSign, TrendingUp, Calendar, MapPin } from 'lucide-react'
+import { getTours } from '../api/api'
+import type { Tour, Meta } from '../api/api'
 
-const categories = [
-  { id: 'all', name: 'Todos', count: 45 },
-  { id: 'surf', name: 'Surf', count: 12 },
-  { id: 'tours', name: 'Tours', count: 18 },
-  { id: 'cascadas', name: 'Cascadas', count: 8 },
-  { id: 'kite', name: 'Kite/Wing', count: 7 },
-]
-
-// Status colors - supports both Spanish (from API) and English (fallback)
-const statusColors: Record<string, string> = {
-  // Spanish status from API
-  'pagado': 'bg-green-100 text-green-700 border-green-200',
-  'reservado': 'bg-turquoise-100 text-turquoise-700 border-turquoise-200',
-  'consulta': 'bg-arena-100 text-arena-700 border-arena-200',
-  'cerrado': 'bg-gray-100 text-gray-700 border-gray-200',
-  'cancelado': 'bg-red-100 text-red-700 border-red-200',
-  // Legacy English status (fallback)
-  'confirmada': 'bg-turquoise-100 text-turquoise-700 border-turquoise-200',
-  'pendiente': 'bg-arena-100 text-arena-700 border-arena-200',
-  'pagada': 'bg-green-100 text-green-700 border-green-200',
-  'cancelada': 'bg-red-100 text-red-700 border-red-200',
+const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
+  'Pagado':    { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
+  'Reservado': { bg: 'bg-turquoise-50', text: 'text-turquoise-700', dot: 'bg-turquoise-500' },
+  'Consulta':  { bg: 'bg-arena-50', text: 'text-arena-700', dot: 'bg-arena-500' },
+  'Cancelado': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
+  'Cerrado':   { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' },
 }
+
+interface PeriodStats { cantidad: number; ingresos: number; ganancia: number }
+
+const PERIODS = [
+  { key: 'hoy', label: 'Hoy' },
+  { key: 'semana', label: 'Semana' },
+  { key: 'mes', label: 'Mes' },
+  { key: 'anio', label: 'Año' },
+  { key: 'todo', label: 'Todo' },
+] as const
+
+const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
 
 export default function ToursList() {
   const [search, setSearch] = useState('')
-  const [activeCategory, setActiveCategory] = useState('all')
   const [activeStatus, setActiveStatus] = useState<string | null>(null)
+  const [activePeriod, setActivePeriod] = useState<string>('semana')
   const [tours, setTours] = useState<Tour[]>([])
+  const [meta, setMeta] = useState<Meta>({ total: 0, page: 1, limit: 20, pages: 0 })
+  const [periodStats, setPeriodStats] = useState<Record<string, PeriodStats>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    const loadTours = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        const data = await getTours()
-        setTours(data.data || [])
-      } catch (err) {
-        setError('Error al cargar los tours')
-        console.error('Error loading tours:', err)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadTours()
+    fetch('/api/v1/charts').then(r => r.json()).then(r => {
+      if (r.success) setPeriodStats(r.data.periodos)
+    }).catch(() => {})
   }, [])
 
-  // Filtrar tours
-  const filteredReservations = tours.filter((tour) => {
-    if (search && !tour.Cliente?.toLowerCase().includes(search.toLowerCase())) return false
-    if (activeStatus && tour.Estatus?.toLowerCase() !== activeStatus) return false
-    return true
-  })
-
-  // Formatear datos para mostrar
-  const formattedReservations = filteredReservations.map((tour, index) => ({
-    id: index,
-    client: tour.Cliente || 'Sin cliente',
-    activity: tour.Actividad || 'Sin actividad',
-    date: tour.Fecha || 'Sin fecha',
-    time: tour.Hora || '',
-    status: tour.Estatus?.toLowerCase() || 'pendiente',
-    amount: tour['Precio (Ingreso)'] || 0,
-    seller: tour.Vendedor || 'Sin vendedor',
-  }))
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-turquoise-600" />
-      </div>
-    )
+  const getDateRange = (period: string): { desde?: string; hasta?: string } => {
+    const now = new Date()
+    const today = now.toISOString().split('T')[0]
+    switch (period) {
+      case 'hoy': return { desde: today, hasta: today }
+      case 'semana': { const s = new Date(now); s.setDate(s.getDate() - s.getDay()); return { desde: s.toISOString().split('T')[0] } }
+      case 'mes': return { desde: today.substring(0, 7) + '-01' }
+      case 'anio': return { desde: today.substring(0, 4) + '-01-01' }
+      default: return {}
+    }
   }
 
-  if (error) {
-    return (
-      <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-        <div className="bg-red-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-          <AlertCircle className="w-8 h-8 text-red-600" />
-        </div>
-        <h3 className="text-lg font-semibold text-azul-900 mb-2">Error al cargar</h3>
-        <p className="text-gray-500 mb-4">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="px-4 py-2 bg-turquoise-600 text-white rounded-lg hover:bg-turquoise-700"
-        >
-          Reintentar
-        </button>
-      </div>
-    )
+  const loadTours = async (page = 1) => {
+    setLoading(true); setError(null)
+    try {
+      const params: Record<string, string | number> = { page, limit: 20 }
+      if (activeStatus) params.estatus = activeStatus
+      if (search) params.cliente = search
+      const range = getDateRange(activePeriod)
+      if (range.desde) params.fecha_desde = range.desde
+      if (range.hasta) params.fecha_hasta = range.hasta
+      const result = await getTours(params)
+      if (result.success) { setTours(result.data || []); if (result.meta) setMeta(result.meta) }
+      else setError(result.error?.message || 'Error')
+    } catch { setError('Error de conexión') }
+    finally { setLoading(false) }
   }
+
+  useEffect(() => { loadTours() }, [activeStatus, activePeriod])
+  const handleSearch = () => loadTours(1)
+  const currentStats = periodStats[activePeriod]
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-2xl font-bold text-azul-900">Tours Mahana</h1>
-        <button className="bg-turquoise-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-turquoise-700 transition-colors">
+        <div className="flex items-center gap-3">
+          <img src="/mahana-logo.jpg" alt="Mahana Tours" className="w-11 h-11 rounded-xl object-cover shadow-sm ring-1 ring-gray-200" />
+          <div>
+            <h1 className="text-2xl font-bold text-azul-900">Tours</h1>
+            <p className="text-sm text-gray-500">{meta.total} reservas</p>
+          </div>
+        </div>
+        <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
           + Nueva Reserva
         </button>
       </div>
 
-      {/* Search and Filters */}
-      <div className="bg-white rounded-xl shadow-sm p-4 space-y-4">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por cliente..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500"
-          />
+      {/* Period + KPIs + Filters */}
+      <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-4">
+        {/* Period Pills */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+          {PERIODS.map((p) => (
+            <button key={p.key} onClick={() => setActivePeriod(p.key)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                activePeriod === p.key ? 'bg-white text-azul-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'
+              }`}>{p.label}</button>
+          ))}
         </div>
 
-        {/* Status Filters - Spanish values from API */}
+        {/* Mini KPIs */}
+        {currentStats && (
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-gradient-to-br from-turquoise-50 to-turquoise-100/50 rounded-xl px-3 py-2.5 text-center border border-turquoise-200/50">
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                <Calendar className="w-3.5 h-3.5 text-turquoise-600" />
+                <span className="text-[10px] text-turquoise-600 font-semibold uppercase">Reservas</span>
+              </div>
+              <p className="text-xl font-bold text-turquoise-700">{currentStats.cantidad}</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-50 to-green-100/50 rounded-xl px-3 py-2.5 text-center border border-green-200/50">
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                <DollarSign className="w-3.5 h-3.5 text-green-600" />
+                <span className="text-[10px] text-green-600 font-semibold uppercase">Ingresos</span>
+              </div>
+              <p className="text-xl font-bold text-green-700">{fmt(currentStats.ingresos)}</p>
+            </div>
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl px-3 py-2.5 text-center border border-blue-200/50">
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                <span className="text-[10px] text-blue-600 font-semibold uppercase">Ganancia</span>
+              </div>
+              <p className="text-xl font-bold text-blue-700">{fmt(currentStats.ganancia)}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Search + Status */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input type="text" placeholder="Buscar por cliente..." value={search}
+              onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 text-sm" />
+          </div>
+          <button onClick={handleSearch} className="px-4 py-2 bg-azul-900 text-white rounded-lg hover:bg-azul-800 transition-colors text-sm font-medium">Buscar</button>
+        </div>
         <div className="flex flex-wrap gap-2">
-          {['Pagado', 'Reservado', 'Consulta', 'Cancelado'].map((status) => (
-            <button
-              key={status}
-              onClick={() => setActiveStatus(activeStatus === status.toLowerCase() ? null : status.toLowerCase())}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                activeStatus === status.toLowerCase()
-                  ? statusColors[status.toLowerCase()] || statusColors['pendiente']
-                  : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
-              }`}
-            >
+          {Object.entries(statusConfig).filter(([k]) => k !== 'Cerrado').map(([status, conf]) => (
+            <button key={status} onClick={() => setActiveStatus(activeStatus === status ? null : status)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                activeStatus === status ? `${conf.bg} ${conf.text} border-current` : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+              }`}>
+              <span className={`inline-block w-1.5 h-1.5 rounded-full ${conf.dot} mr-1.5`} />
               {status}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Category Tabs */}
-      <div className="flex overflow-x-auto gap-2 pb-2">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            onClick={() => setActiveCategory(cat.id)}
-            className={`px-4 py-2 rounded-lg whitespace-nowrap transition-colors ${
-              activeCategory === cat.id
-                ? 'bg-azul-900 text-white'
-                : 'bg-white text-azul-900 hover:bg-gray-100'
-            }`}
-          >
-            {cat.name} ({cat.count})
-          </button>
-        ))}
-      </div>
-
-      {/* Desktop Table */}
-      <div className="hidden md:block bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actividad</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {formattedReservations.length > 0 ? (
-              formattedReservations.map((r) => (
-                <tr key={r.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-azul-900">{r.client}</td>
-                  <td className="px-6 py-4 text-gray-600">{r.activity}</td>
-                  <td className="px-6 py-4 text-gray-600">
-                    {r.date} {r.time}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[r.status] || statusColors['pendiente']}`}
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right font-medium text-azul-900">${r.amount}</td>
+      {/* Content */}
+      {loading ? (
+        <div className="flex items-center justify-center h-40"><Loader2 className="w-8 h-8 animate-spin text-turquoise-600" /></div>
+      ) : error ? (
+        <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+          <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+          <p className="text-gray-500 mb-4">{error}</p>
+          <button onClick={() => loadTours()} className="px-4 py-2 bg-turquoise-600 text-white rounded-lg">Reintentar</button>
+        </div>
+      ) : (
+        <>
+          {/* Desktop Table */}
+          <div className="hidden lg:block bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+            <table className="w-full">
+              <thead className="bg-gray-50/80 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Actividad</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Responsable</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
+                  <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ingreso</th>
+                  <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ganancia</th>
+                  <th className="px-4 py-3 w-8"></th>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
-                  No hay tours que coincidan con tu búsqueda
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Mobile Cards */}
-      <div className="md:hidden space-y-3">
-        {formattedReservations.length > 0 ? (
-          formattedReservations.map((r) => (
-            <div key={r.id} className="bg-white rounded-xl shadow-sm p-4">
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-medium text-azul-900">{r.client}</h3>
-                  <p className="text-sm text-gray-500">{r.activity}</p>
-                </div>
-                <span
-                  className={`px-2 py-1 rounded-full text-xs font-medium ${
-                    statusColors[r.status] || statusColors['pendiente']
-                  }`}
-                >
-                  {r.status}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 flex items-center gap-1">
-                  <Calendar className="w-4 h-4" /> {r.date}
-                </span>
-                <span className="font-medium text-azul-900">${r.amount}</span>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-            <p className="text-gray-500">No hay tours que coincidan con tu búsqueda</p>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {tours.length > 0 ? tours.map((t, i) => {
+                  const conf = statusConfig[t.estatus] || statusConfig['Cerrado']
+                  return (
+                    <tr key={t.id} className={`hover:bg-turquoise-50/30 cursor-pointer transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}
+                      onClick={() => navigate(`/tours/${t.id}/editar`)}>
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-azul-900 text-sm">{t.cliente}</p>
+                        {t.whatsapp && <p className="text-[11px] text-gray-400">{t.whatsapp}</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 text-sm text-gray-700">
+                          <MapPin className="w-3 h-3 text-turquoise-500" />{t.actividad}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        <span>{t.fecha}</span>
+                        {t.hora && <span className="text-xs text-gray-400 ml-1.5 bg-gray-100 px-1.5 py-0.5 rounded">{t.hora}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{t.responsable}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${conf.bg} ${conf.text}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${conf.dot}`} />
+                          {t.estatus}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-medium text-azul-900">{fmt(t.precio_ingreso || 0)}</td>
+                      <td className={`px-4 py-3 text-right text-sm font-semibold ${(t.ganancia_mahana || 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {fmt(t.ganancia_mahana || 0)}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {t.fuente === 'openclaw' && <Bot className="w-3.5 h-3.5 text-purple-400 inline" />}
+                        {t.fuente === 'manual' && <User className="w-3.5 h-3.5 text-gray-300 inline" />}
+                      </td>
+                    </tr>
+                  )
+                }) : (
+                  <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">No hay tours en este período</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
 
-      {/* Pagination */}
-      <div className="flex justify-center gap-2">
-        <button className="px-4 py-2 bg-white rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-          Anterior
-        </button>
-        <button className="px-4 py-2 bg-turquoise-600 text-white rounded-lg font-medium">
-          1
-        </button>
-        <button className="px-4 py-2 bg-white rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-          2
-        </button>
-        <button className="px-4 py-2 bg-white rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-          Siguiente
-        </button>
-      </div>
+          {/* Mobile Cards */}
+          <div className="lg:hidden space-y-2.5">
+            {tours.length > 0 ? tours.map((t) => {
+              const conf = statusConfig[t.estatus] || statusConfig['Cerrado']
+              return (
+                <div key={t.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md hover:border-turquoise-200 transition-all"
+                  onClick={() => navigate(`/tours/${t.id}/editar`)}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {t.hora && <span className="bg-azul-900 text-white text-[10px] px-2 py-0.5 rounded-md font-mono shrink-0">{t.hora}</span>}
+                      <span className="text-sm font-medium text-turquoise-600 truncate flex items-center gap-1">
+                        <MapPin className="w-3 h-3 shrink-0" />{t.actividad}
+                      </span>
+                    </div>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ml-2 ${conf.bg} ${conf.text}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${conf.dot}`} />{t.estatus}
+                    </span>
+                  </div>
+                  <p className="font-semibold text-azul-900 text-sm mb-1">{t.cliente}</p>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-500 text-xs">{t.fecha} • {t.responsable || 'Sin asignar'}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-green-600">{fmt(t.precio_ingreso || 0)}</span>
+                      <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">→ {fmt(t.ganancia_mahana || 0)}</span>
+                      {t.fuente === 'openclaw' && <Bot className="w-3 h-3 text-purple-400" />}
+                    </div>
+                  </div>
+                </div>
+              )
+            }) : (
+              <div className="bg-white rounded-xl shadow-sm p-10 text-center text-gray-400 text-sm">No hay tours en este período</div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {meta.pages > 1 && (
+            <div className="flex justify-center items-center gap-2">
+              <button disabled={meta.page <= 1} onClick={() => loadTours(meta.page - 1)}
+                className="p-2 bg-white rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm text-gray-500 px-3 font-medium">{meta.page} / {meta.pages}</span>
+              <button disabled={meta.page >= meta.pages} onClick={() => loadTours(meta.page + 1)}
+                className="p-2 bg-white rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-colors">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
