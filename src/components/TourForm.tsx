@@ -45,9 +45,8 @@ export default function TourForm() {
   const precioVenta = parseFloat(form.precio_ingreso) || 0
   const costo = parseFloat(form.costo_pago) || 0
   const comisionPct = parseFloat(form.comision_pct) || 0
-  const ganancia = comisionPct > 0
-    ? precioVenta * (comisionPct / 100)
-    : precioVenta - costo
+  const montoComision = precioVenta * (comisionPct / 100)
+  const ganancia = precioVenta - costo - montoComision
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -173,7 +172,7 @@ export default function TourForm() {
               ${ganancia.toFixed(2)}
             </div>
             {comisionPct > 0 && (
-              <p className="text-[10px] text-gray-400 mt-0.5">= Venta × {comisionPct}%</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">= Venta - Costo - {comisionPct}%</p>
             )}
           </div>
         </div>

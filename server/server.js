@@ -133,8 +133,11 @@ app.post('/api/v1/tours', requireApiKey, (req, res) => {
     }
 
     // Auto-calculate ganancia if not provided
-    if (data.precio_ingreso !== undefined && data.costo_pago !== undefined && data.ganancia_mahana === undefined) {
-      data.ganancia_mahana = (data.precio_ingreso || 0) - (data.costo_pago || 0);
+    if (data.precio_ingreso !== undefined && data.ganancia_mahana === undefined) {
+      const precio = data.precio_ingreso || 0;
+      const costo = data.costo_pago || 0;
+      const comPct = data.comision_pct || 0;
+      data.ganancia_mahana = precio - costo - (precio * comPct / 100);
     }
 
     if (!data.fuente) data.fuente = 'api';
