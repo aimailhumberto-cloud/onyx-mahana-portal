@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, Building2, Calendar, Users } from 'lucide-react'
+import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, Building2, Calendar, Users, DollarSign } from 'lucide-react'
 import { getEstadias } from '../api/api'
 import type { Estadia, Meta } from '../api/api'
 
@@ -9,10 +9,11 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string; icon
   'Cotizada':   { bg: 'bg-arena-50', text: 'text-arena-700', dot: 'bg-arena-500', icon: '💬', label: 'Cotizadas', border: 'border-arena-300' },
   'Confirmada': { bg: 'bg-turquoise-50', text: 'text-turquoise-700', dot: 'bg-turquoise-500', icon: '✅', label: 'Confirmadas', border: 'border-turquoise-300' },
   'Pagada':     { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500', icon: '💰', label: 'Pagadas', border: 'border-green-300' },
-  'Cancelada':  { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-400', icon: '❌', label: 'Canceladas', border: 'border-red-300' },
+  'Perdida':    { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-400', icon: '❌', label: 'Perdidas', border: 'border-red-300' },
 }
 
-const STATUS_ORDER = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Cancelada']
+const STATUS_ORDER = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Perdida']
+const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`
 
 export default function EstadiasList() {
   const [search, setSearch] = useState('')
@@ -20,16 +21,22 @@ export default function EstadiasList() {
   const [estadias, setEstadias] = useState<Estadia[]>([])
   const [meta, setMeta] = useState<Meta>({ total: 0, page: 1, limit: 20, pages: 0 })
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
+  const [leadsAbiertos, setLeadsAbiertos] = useState({ cantidad: 0, monto: 0 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
     fetch('/api/v1/charts').then(r => r.json()).then(r => {
-      if (r.success && r.data.estadiasPorEstado) {
-        const counts: Record<string, number> = {}
-        r.data.estadiasPorEstado.forEach((s: { estado: string; cantidad: number }) => { counts[s.estado] = s.cantidad })
-        setStatusCounts(counts)
+      if (r.success) {
+        if (r.data.estadiasPorEstado) {
+          const counts: Record<string, number> = {}
+          r.data.estadiasPorEstado.forEach((s: { estado: string; cantidad: number }) => { counts[s.estado] = s.cantidad })
+          setStatusCounts(counts)
+        }
+        if (r.data.leadsAbiertos) {
+          setLeadsAbiertos(r.data.leadsAbiertos)
+        }
       }
     }).catch(() => {})
   }, [])
@@ -53,12 +60,12 @@ export default function EstadiasList() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
+      {/* Header — bigger logos */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center -space-x-2">
-            <img src="/caracol-logo.png" alt="Playa Caracol" className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-sm ring-1 ring-gray-200" />
-            <img src="/casa-mahana-logo.png" alt="Casa Mahana" className="w-10 h-10 rounded-xl object-contain bg-white p-0.5 shadow-sm ring-1 ring-gray-200" />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <img src="/caracol-logo.png" alt="Playa Caracol" className="w-14 h-14 rounded-xl object-contain bg-gradient-to-br from-blue-50 to-blue-100 p-1.5 shadow-md ring-1 ring-blue-200/50" />
+            <img src="/casa-mahana-logo.png" alt="Casa Mahana" className="w-14 h-14 rounded-xl object-contain bg-gradient-to-br from-purple-50 to-purple-100 p-1.5 shadow-md ring-1 ring-purple-200/50" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-azul-900">Estadías</h1>
@@ -70,9 +77,9 @@ export default function EstadiasList() {
         </button>
       </div>
 
-      {/* Status Pipeline */}
+      {/* Status Pipeline + Leads KPI */}
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-6 gap-2">
           {STATUS_ORDER.map((status) => {
             const conf = statusConfig[status]
             const count = statusCounts[status] || 0
@@ -88,6 +95,12 @@ export default function EstadiasList() {
               </button>
             )
           })}
+          {/* Leads Abiertos KPI */}
+          <div className="rounded-xl p-3 text-center bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200/50">
+            <span className="text-lg block mb-0.5">🔥</span>
+            <span className="text-lg font-bold block text-amber-700">{fmt(leadsAbiertos.monto)}</span>
+            <span className="text-[9px] sm:text-[10px] text-amber-600 font-medium uppercase tracking-wide block mt-0.5">Leads $</span>
+          </div>
         </div>
         {totalAll > 0 && (
           <div className="mt-3 flex h-2 rounded-full overflow-hidden bg-gray-100">
@@ -136,7 +149,7 @@ export default function EstadiasList() {
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Fechas</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Huésp.</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
-                  <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Comisión</th>
+                  <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ganancia</th>
                   <th className="px-4 py-3 w-8"></th>
                 </tr>
               </thead>
@@ -173,7 +186,7 @@ export default function EstadiasList() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         {e.monto_comision ? (
-                          <span className="font-semibold text-purple-600 text-sm">${Math.round(e.monto_comision).toLocaleString()}</span>
+                          <span className="font-semibold text-green-600 text-sm">${Math.round(e.monto_comision).toLocaleString()}</span>
                         ) : (
                           <span className="text-gray-300 text-sm">—</span>
                         )}
@@ -211,7 +224,7 @@ export default function EstadiasList() {
                     <span className="text-gray-500 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />{e.check_in} → {e.check_out}
                     </span>
-                    <span className="font-semibold text-purple-600">{e.monto_comision ? `$${Math.round(e.monto_comision)}` : '—'}</span>
+                    <span className="font-semibold text-green-600">{e.monto_comision ? `$${Math.round(e.monto_comision)}` : '—'}</span>
                   </div>
                   {e.huespedes && (
                     <div className="mt-1.5 text-[10px] text-gray-400 flex items-center gap-1">

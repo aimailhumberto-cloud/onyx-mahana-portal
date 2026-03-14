@@ -3,8 +3,15 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
 import { createEstadia, getEstadiaById, updateEstadia } from '../api/api'
 
-const STATES = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Cancelada']
-const PROPERTIES = ['Radisson', 'Caracol Residences', 'Otro']
+const STATES = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Perdida']
+const PROPERTIES = ['Radisson', 'Caracol Residences', 'Casa Mahana', 'Otro']
+
+// Impuesto por propiedad: Caracol Residences=0%, Radisson=10%, Casa Mahana=10%
+const TAX_BY_PROPERTY: Record<string, number> = {
+  'Radisson': 10,
+  'Caracol Residences': 0,
+  'Casa Mahana': 10,
+}
 
 export default function EstadiaForm() {
   const { id } = useParams()
@@ -14,7 +21,8 @@ export default function EstadiaForm() {
   const [form, setForm] = useState({
     cliente: '', whatsapp: '', email: '', propiedad: '', tipo: '',
     check_in: '', check_out: '', huespedes: '', habitaciones: '',
-    precio_cotizado: '', precio_final: '', comision_pct: '20',
+    precio_cotizado: '', precio_final: '', base_caracol: '', impuesto: '',
+    cleaning_fee: '', comision_pct: '20',
     estado: 'Solicitada', responsable: '', notas: '', fuente: 'manual'
   })
   const [saving, setSaving] = useState(false)
@@ -32,6 +40,8 @@ export default function EstadiaForm() {
             propiedad: e.propiedad || '', tipo: e.tipo || '', check_in: e.check_in || '',
             check_out: e.check_out || '', huespedes: e.huespedes || '', habitaciones: e.habitaciones || '',
             precio_cotizado: e.precio_cotizado || '', precio_final: e.precio_final?.toString() || '',
+            base_caracol: e.base_caracol?.toString() || '', impuesto: e.impuesto?.toString() || '',
+            cleaning_fee: e.cleaning_fee?.toString() || '',
             comision_pct: e.comision_pct?.toString() || '20', estado: e.estado || 'Solicitada',
             responsable: e.responsable || '', notas: e.notas || '', fuente: e.fuente || 'manual'
           })
@@ -41,9 +51,35 @@ export default function EstadiaForm() {
     }
   }, [id])
 
-  const precioFinal = parseFloat(form.precio_final) || 0
-  const comisionPct = parseFloat(form.comision_pct) || 20
-  const montoComision = precioFinal * (comisionPct / 100)
+  // Financial calculations
+  const precioCliente = parseFloat(form.precio_final) || 0
+  const baseCaracol = parseFloat(form.base_caracol) || 0
+  const taxPct = TAX_BY_PROPERTY[form.propiedad] ?? 0
+  const impuestoAuto = baseCaracol * (taxPct / 100)
+  const impuesto = form.impuesto !== '' ? (parseFloat(form.impuesto) || 0) : impuestoAuto
+  const cleaningFee = parseFloat(form.cleaning_fee) || 0
+  const ganancia = precioCliente - baseCaracol - impuesto - cleaningFee
+  const comisionPct = precioCliente > 0 ? Math.round((ganancia / precioCliente) * 100) : 0
+
+  // Auto-set impuesto when property changes
+  const handlePropertyChange = (prop: string) => {
+    onChange('propiedad', prop)
+    const base = parseFloat(form.base_caracol) || 0
+    if (base > 0) {
+      const taxP = TAX_BY_PROPERTY[prop] ?? 0
+      onChange('impuesto', (base * taxP / 100).toFixed(2))
+    }
+  }
+
+  // Auto-recalc impuesto when base changes
+  const handleBaseChange = (val: string) => {
+    onChange('base_caracol', val)
+    const base = parseFloat(val) || 0
+    if (base > 0 && form.propiedad) {
+      const taxP = TAX_BY_PROPERTY[form.propiedad] ?? 0
+      setForm(prev => ({ ...prev, base_caracol: val, impuesto: (base * taxP / 100).toFixed(2) }))
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,9 +87,12 @@ export default function EstadiaForm() {
     setResult(null)
     const data: any = {
       ...form,
-      precio_final: precioFinal || undefined,
+      precio_final: precioCliente || undefined,
+      base_caracol: baseCaracol || undefined,
+      impuesto: impuesto || undefined,
+      cleaning_fee: cleaningFee || undefined,
       comision_pct: comisionPct,
-      monto_comision: precioFinal ? montoComision : undefined
+      monto_comision: ganancia > 0 ? ganancia : undefined
     }
     try {
       const res = isEdit ? await updateEstadia(Number(id), data) : await createEstadia(data)
@@ -109,7 +148,7 @@ export default function EstadiaForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Propiedad *</label>
-            <select required value={form.propiedad} onChange={e => onChange('propiedad', e.target.value)}
+            <select required value={form.propiedad} onChange={e => handlePropertyChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
               <option value="">Seleccionar...</option>
               {PROPERTIES.map(p => <option key={p} value={p}>{p}</option>)}
@@ -146,27 +185,48 @@ export default function EstadiaForm() {
           </div>
         </div>
 
-        {/* Pricing + Commission */}
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Precio Cotizado</label>
-            <input value={form.precio_cotizado} onChange={e => onChange('precio_cotizado', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Por cotizar" />
+        {/* Financial Breakdown */}
+        <div className="border-t border-gray-200 pt-4">
+          <h3 className="text-sm font-semibold text-azul-900 mb-3">💰 Desglose Financiero</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Cotizado</label>
+              <input value={form.precio_cotizado} onChange={e => onChange('precio_cotizado', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Por cotizar" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio al Cliente $</label>
+              <input type="number" step="0.01" value={form.precio_final} onChange={e => onChange('precio_final', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 font-medium" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Base Pagada $</label>
+              <input type="number" step="0.01" value={form.base_caracol} onChange={e => handleBaseChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="0.00" />
+              <p className="text-[10px] text-gray-400 mt-0.5">Lo pagado a la propiedad</p>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Precio Final $</label>
-            <input type="number" step="0.01" value={form.precio_final} onChange={e => onChange('precio_final', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="0.00" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Comisión %</label>
-            <input type="number" step="0.1" value={form.comision_pct} onChange={e => onChange('comision_pct', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Tu Comisión</label>
-            <div className="px-3 py-2 border rounded-lg font-semibold bg-purple-50 text-purple-700 border-purple-200">
-              ${montoComision.toFixed(2)}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Impuesto $ <span className="text-[10px] text-gray-400">({taxPct}%)</span>
+              </label>
+              <input type="number" step="0.01" value={form.impuesto} onChange={e => onChange('impuesto', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="0.00" />
+              {form.propiedad && <p className="text-[10px] text-gray-400 mt-0.5">{form.propiedad}: {taxPct}%</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cleaning Fee $</label>
+              <input type="number" step="0.01" value={form.cleaning_fee} onChange={e => onChange('cleaning_fee', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="0.00" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Tu Ganancia</label>
+              <div className={`px-3 py-2 border rounded-lg font-bold text-lg ${ganancia >= 0 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                ${ganancia.toFixed(2)}
+                {comisionPct > 0 && <span className="text-xs font-normal ml-2">({comisionPct}% del precio)</span>}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-0.5">= Precio - Base - Impuesto - Cleaning</p>
             </div>
           </div>
         </div>

@@ -250,7 +250,8 @@ app.post('/api/v1/estadias', requireApiKey, (req, res) => {
     const data = {};
     const allowed = ['fecha_solicitud', 'cliente', 'whatsapp', 'email', 'propiedad', 'tipo',
       'check_in', 'check_out', 'huespedes', 'habitaciones', 'precio_cotizado', 'precio_final',
-      'comision_pct', 'monto_comision', 'estado', 'responsable', 'notas', 'fuente'];
+      'comision_pct', 'monto_comision', 'base_caracol', 'impuesto', 'cleaning_fee',
+      'estado', 'responsable', 'notas', 'fuente'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined && req.body[field] !== null) {
@@ -282,7 +283,8 @@ app.put('/api/v1/estadias/:id', requireApiKey, (req, res) => {
     const data = {};
     const allowed = ['cliente', 'whatsapp', 'email', 'propiedad', 'tipo', 'check_in', 'check_out',
       'huespedes', 'habitaciones', 'precio_cotizado', 'precio_final', 'comision_pct',
-      'monto_comision', 'estado', 'responsable', 'notas'];
+      'monto_comision', 'base_caracol', 'impuesto', 'cleaning_fee',
+      'estado', 'responsable', 'notas'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined) {
@@ -302,7 +304,7 @@ app.patch('/api/v1/estadias/:id/status', requireApiKey, (req, res) => {
     const { estado } = req.body;
     if (!estado) return error(res, 'VALIDATION_ERROR', 'Field "estado" is required', 400, ['estado']);
 
-    const valid = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Cancelada'];
+    const valid = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Perdida'];
     if (!valid.includes(estado)) {
       return error(res, 'VALIDATION_ERROR', `Invalid estado. Valid: ${valid.join(', ')}`, 400, ['estado']);
     }
@@ -587,9 +589,18 @@ app.get('/api/v1/charts', (req, res) => {
       FROM reservas_estadias
     `).get();
 
+    // Leads abiertos (sum of precio_final for states before Pagada)
+    const leadsAbiertos = db.prepare(`
+      SELECT COUNT(*) as cantidad,
+        COALESCE(SUM(CASE WHEN precio_final IS NOT NULL AND precio_final > 0 THEN precio_final ELSE 0 END), 0) as monto
+      FROM reservas_estadias
+      WHERE estado IN ('Solicitada', 'Cotizada', 'Confirmada')
+    `).get();
+
     success(res, {
       ingresosPorMes, porActividad, periodos, estadiasPorEstado,
       mesesDisponibles, filteredStats, estadiasFinancieros,
+      leadsAbiertos,
       mesActual: filterMonth
     });
   } catch (err) {

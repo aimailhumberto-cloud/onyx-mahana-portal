@@ -17,6 +17,24 @@ function getDb() {
     const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
     db.exec(schema);
 
+    // Migrations — safe to run multiple times
+    const addCol = (table, col, type) => {
+      try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch {}
+    };
+    addCol('reservas_estadias', 'base_caracol', 'REAL');
+    addCol('reservas_estadias', 'impuesto', 'REAL');
+    addCol('reservas_estadias', 'cleaning_fee', 'REAL');
+
+    // Rename Cancelada → Perdida in existing data
+    db.prepare(`UPDATE reservas_estadias SET estado = 'Perdida' WHERE estado = 'Cancelada'`).run();
+
+    // Ensure actividades catalog has Otro and Academia de Surf
+    const ensureAct = (nombre) => {
+      try { db.prepare('INSERT INTO actividades (nombre, tipo) VALUES (?, ?)').run(nombre, 'tour'); } catch {}
+    };
+    ensureAct('Academia de Surf');
+    ensureAct('Otro');
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;
