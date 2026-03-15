@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, Clock, DollarSign, TrendingUp, Calendar, MapPin } from 'lucide-react'
-import { getTours } from '../api/api'
+import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Calendar, MapPin, Download } from 'lucide-react'
+import { getTours, getCharts } from '../api/api'
 import type { Tour, Meta } from '../api/api'
+import { downloadCSV } from '../utils/exportUtils'
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
   'Pagado':    { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
@@ -36,9 +37,9 @@ export default function ToursList() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    fetch('/api/v1/charts').then(r => r.json()).then(r => {
-      if (r.success) setPeriodStats(r.data.periodos)
-    }).catch(() => {})
+    getCharts().then(r => {
+      if (r.success && r.data?.periodos) setPeriodStats(r.data.periodos)
+    })
   }, [])
 
   const getDateRange = (period: string): { desde?: string; hasta?: string } => {
@@ -84,9 +85,21 @@ export default function ToursList() {
             <p className="text-sm text-gray-500">{meta.total} reservas</p>
           </div>
         </div>
-        <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
-          + Nueva Reserva
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => {
+            const range = getDateRange(activePeriod)
+            const params = new URLSearchParams()
+            if (range.desde) params.set('fecha_desde', range.desde)
+            if (range.hasta) params.set('fecha_hasta', range.hasta)
+            if (activeStatus) params.set('estatus', activeStatus)
+            downloadCSV(`/api/v1/tours/export?${params}`, `tours_${new Date().toISOString().split('T')[0]}.csv`)
+          }} className="flex items-center gap-1.5 bg-white text-azul-900 border border-gray-200 px-4 py-2.5 rounded-xl font-medium hover:bg-gray-50 hover:shadow-sm transition-all text-sm">
+            <Download className="w-4 h-4" /> Exportar
+          </button>
+          <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
+            + Nueva Reserva
+          </button>
+        </div>
       </div>
 
       {/* Period + KPIs + Filters */}

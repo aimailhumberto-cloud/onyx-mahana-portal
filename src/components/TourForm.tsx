@@ -42,6 +42,24 @@ export default function TourForm() {
     }
   }, [id])
 
+  // Auto-fill from catalog when selecting activity (only for new tours)
+  const handleActividadChange = (nombre: string) => {
+    onChange('actividad', nombre)
+    if (!isEdit) {
+      const act = actividades.find(a => a.nombre === nombre)
+      if (act) {
+        setForm(prev => ({
+          ...prev,
+          actividad: nombre,
+          precio_ingreso: act.precio_base != null ? act.precio_base.toString() : prev.precio_ingreso,
+          costo_pago: act.costo_base != null ? act.costo_base.toString() : prev.costo_pago,
+          comision_pct: act.comision_caracol_pct != null ? act.comision_caracol_pct.toString() : prev.comision_pct,
+          hora: act.horario || prev.hora,
+        }))
+      }
+    }
+  }
+
   const precioVenta = parseFloat(form.precio_ingreso) || 0
   const costo = parseFloat(form.costo_pago) || 0
   const comisionPct = parseFloat(form.comision_pct) || 0
@@ -108,7 +126,7 @@ export default function TourForm() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Actividad *</label>
-            <select required value={form.actividad} onChange={e => onChange('actividad', e.target.value)}
+            <select required value={form.actividad} onChange={e => handleActividadChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
               <option value="">Seleccionar...</option>
               {actividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}

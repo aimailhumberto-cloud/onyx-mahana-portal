@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, Building2, Calendar, Users, DollarSign } from 'lucide-react'
-import { getEstadias } from '../api/api'
+import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, Building2, Calendar, Users, Download } from 'lucide-react'
+import { getEstadias, getCharts } from '../api/api'
 import type { Estadia, Meta } from '../api/api'
+import { downloadCSV } from '../utils/exportUtils'
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string; icon: string; label: string; border: string }> = {
   'Solicitada': { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-400', icon: '📥', label: 'Solicitadas', border: 'border-gray-300' },
@@ -27,8 +28,8 @@ export default function EstadiasList() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    fetch('/api/v1/charts').then(r => r.json()).then(r => {
-      if (r.success) {
+    getCharts().then(r => {
+      if (r.success && r.data) {
         if (r.data.estadiasPorEstado) {
           const counts: Record<string, number> = {}
           r.data.estadiasPorEstado.forEach((s: { estado: string; cantidad: number }) => { counts[s.estado] = s.cantidad })
@@ -38,7 +39,7 @@ export default function EstadiasList() {
           setLeadsAbiertos(r.data.leadsAbiertos)
         }
       }
-    }).catch(() => {})
+    })
   }, [])
 
   const loadEstadias = async (page = 1) => {
@@ -72,9 +73,18 @@ export default function EstadiasList() {
             <p className="text-sm text-gray-500">{meta.total} solicitudes</p>
           </div>
         </div>
-        <button onClick={() => navigate('/estadias/nuevo')} className="bg-gradient-to-r from-purple-600 to-purple-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
-          + Nueva Estadía
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => {
+            const params = new URLSearchParams()
+            if (activeStatus) params.set('estado', activeStatus)
+            downloadCSV(`/api/v1/estadias/export?${params}`, `estadias_${new Date().toISOString().split('T')[0]}.csv`)
+          }} className="flex items-center gap-1.5 bg-white text-azul-900 border border-gray-200 px-4 py-2.5 rounded-xl font-medium hover:bg-gray-50 hover:shadow-sm transition-all text-sm">
+            <Download className="w-4 h-4" /> Exportar
+          </button>
+          <button onClick={() => navigate('/estadias/nuevo')} className="bg-gradient-to-r from-purple-600 to-purple-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
+            + Nueva Estadía
+          </button>
+        </div>
       </div>
 
       {/* Status Pipeline + Leads KPI */}

@@ -1,17 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
-import { createEstadia, getEstadiaById, updateEstadia } from '../api/api'
+import { createEstadia, getEstadiaById, updateEstadia, getPropiedades } from '../api/api'
+import type { Propiedad } from '../api/api'
 
 const STATES = ['Solicitada', 'Cotizada', 'Confirmada', 'Pagada', 'Perdida']
-const PROPERTIES = ['Radisson', 'Caracol Residences', 'Casa Mahana', 'Otro']
-
-// Impuesto por propiedad: Caracol Residences=0%, Radisson=10%, Casa Mahana=10%
-const TAX_BY_PROPERTY: Record<string, number> = {
-  'Radisson': 10,
-  'Caracol Residences': 0,
-  'Casa Mahana': 10,
-}
 
 export default function EstadiaForm() {
   const { id } = useParams()
@@ -25,11 +18,13 @@ export default function EstadiaForm() {
     cleaning_fee: '', comision_pct: '20',
     estado: 'Solicitada', responsable: '', notas: '', fuente: 'manual'
   })
+  const [propiedades, setPropiedades] = useState<Propiedad[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
+    getPropiedades().then(r => { if (r.success) setPropiedades(r.data.filter(p => p.activa)) })
     if (isEdit) {
       setLoading(true)
       getEstadiaById(Number(id)).then(r => {
@@ -51,33 +46,40 @@ export default function EstadiaForm() {
     }
   }, [id])
 
+  // Get tax rate from catalog or fallback to 0
+  const selectedProp = propiedades.find(p => p.nombre === form.propiedad)
+  const taxPct = selectedProp?.impuesto_pct ?? 0
+
   // Financial calculations
   const precioCliente = parseFloat(form.precio_final) || 0
   const baseCaracol = parseFloat(form.base_caracol) || 0
-  const taxPct = TAX_BY_PROPERTY[form.propiedad] ?? 0
   const impuestoAuto = baseCaracol * (taxPct / 100)
   const impuesto = form.impuesto !== '' ? (parseFloat(form.impuesto) || 0) : impuestoAuto
   const cleaningFee = parseFloat(form.cleaning_fee) || 0
   const ganancia = precioCliente - baseCaracol - impuesto - cleaningFee
   const comisionPct = precioCliente > 0 ? Math.round((ganancia / precioCliente) * 100) : 0
 
-  // Auto-set impuesto when property changes
+  // Auto-fill from catalog when property changes
   const handlePropertyChange = (prop: string) => {
-    onChange('propiedad', prop)
+    const catalog = propiedades.find(p => p.nombre === prop)
     const base = parseFloat(form.base_caracol) || 0
-    if (base > 0) {
-      const taxP = TAX_BY_PROPERTY[prop] ?? 0
-      onChange('impuesto', (base * taxP / 100).toFixed(2))
-    }
+    const newTax = catalog?.impuesto_pct ?? 0
+    setForm(prev => ({
+      ...prev,
+      propiedad: prop,
+      impuesto: base > 0 ? (base * newTax / 100).toFixed(2) : prev.impuesto,
+      cleaning_fee: catalog?.cleaning_fee != null && catalog.cleaning_fee > 0
+        ? catalog.cleaning_fee.toString() : prev.cleaning_fee,
+    }))
   }
 
   // Auto-recalc impuesto when base changes
   const handleBaseChange = (val: string) => {
-    onChange('base_caracol', val)
     const base = parseFloat(val) || 0
     if (base > 0 && form.propiedad) {
-      const taxP = TAX_BY_PROPERTY[form.propiedad] ?? 0
-      setForm(prev => ({ ...prev, base_caracol: val, impuesto: (base * taxP / 100).toFixed(2) }))
+      setForm(prev => ({ ...prev, base_caracol: val, impuesto: (base * taxPct / 100).toFixed(2) }))
+    } else {
+      onChange('base_caracol', val)
     }
   }
 
@@ -151,7 +153,8 @@ export default function EstadiaForm() {
             <select required value={form.propiedad} onChange={e => handlePropertyChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
               <option value="">Seleccionar...</option>
-              {PROPERTIES.map(p => <option key={p} value={p}>{p}</option>)}
+              {propiedades.map(p => <option key={p.id} value={p.nombre}>{p.nombre}</option>)}
+              <option value="Otro">Otro</option>
             </select>
           </div>
           <div>

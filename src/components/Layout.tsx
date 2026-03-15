@@ -3,6 +3,8 @@ import {
   Home, 
   Calendar, 
   Building2, 
+  CalendarDays,
+  Package,
   Settings, 
   Menu,
   X
@@ -13,6 +15,8 @@ const navigation = [
   { name: 'Inicio', href: '/', icon: Home },
   { name: 'Tours', href: '/tours', icon: Calendar },
   { name: 'Estadías', href: '/estadias', icon: Building2 },
+  { name: 'Calendario', href: '/calendario', icon: CalendarDays },
+  { name: 'Productos', href: '/productos', icon: Package },
   { name: 'Admin', href: '/admin', icon: Settings },
 ]
 

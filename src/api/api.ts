@@ -6,6 +6,9 @@ const api = axios.create({
   timeout: 10000,
 })
 
+const API_KEY = import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026'
+const authHeaders = { 'X-API-Key': API_KEY }
+
 // ── Types ──
 
 export interface Tour {
@@ -46,6 +49,9 @@ export interface Estadia {
   precio_final: number | null
   comision_pct: number
   monto_comision: number | null
+  base_caracol: number | null
+  impuesto: number | null
+  cleaning_fee: number | null
   estado: string
   responsable: string
   notas: string
@@ -61,6 +67,37 @@ export interface Actividad {
   precio_base: number | null
   costo_base: number | null
   activa: number
+  // Product catalog fields
+  categoria: string | null
+  descripcion: string | null
+  unidad: string | null
+  duracion: string | null
+  horario: string | null
+  punto_encuentro: string | null
+  que_incluye: string | null
+  que_llevar: string | null
+  requisitos: string | null
+  disponibilidad: string | null
+  costo_instructor: number | null
+  comision_caracol_pct: number | null
+  capacidad_max: number | null
+  transporte: number | null
+}
+
+export interface Propiedad {
+  id: number
+  nombre: string
+  descripcion: string | null
+  tipo: string | null
+  habitaciones: number | null
+  capacidad: number | null
+  precio_noche: number | null
+  impuesto_pct: number
+  cleaning_fee: number
+  amenidades: string | null
+  activa: number
+  created_at: string
+  updated_at: string
 }
 
 export interface Staff {
@@ -132,17 +169,17 @@ export async function getTourById(id: number): Promise<ApiResponse<Tour>> {
 }
 
 export async function createTour(data: Partial<Tour>): Promise<ApiResponse<Tour>> {
-  const response = await api.post('/tours', data, { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026' } })
+  const response = await api.post('/tours', data, { headers: authHeaders })
   return response.data
 }
 
 export async function updateTour(id: number, data: Partial<Tour>): Promise<ApiResponse<Tour>> {
-  const response = await api.put(`/tours/${id}`, data, { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026' } })
+  const response = await api.put(`/tours/${id}`, data, { headers: authHeaders })
   return response.data
 }
 
 export async function updateTourStatus(id: number, estatus: string): Promise<ApiResponse<Tour>> {
-  const response = await api.patch(`/tours/${id}/status`, { estatus }, { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026' } })
+  const response = await api.patch(`/tours/${id}/status`, { estatus }, { headers: authHeaders })
   return response.data
 }
 
@@ -164,17 +201,17 @@ export async function getEstadiaById(id: number): Promise<ApiResponse<Estadia>> 
 }
 
 export async function createEstadia(data: Partial<Estadia>): Promise<ApiResponse<Estadia>> {
-  const response = await api.post('/estadias', data, { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026' } })
+  const response = await api.post('/estadias', data, { headers: authHeaders })
   return response.data
 }
 
 export async function updateEstadia(id: number, data: Partial<Estadia>): Promise<ApiResponse<Estadia>> {
-  const response = await api.put(`/estadias/${id}`, data, { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026' } })
+  const response = await api.put(`/estadias/${id}`, data, { headers: authHeaders })
   return response.data
 }
 
 export async function updateEstadiaStatus(id: number, estado: string): Promise<ApiResponse<Estadia>> {
-  const response = await api.patch(`/estadias/${id}/status`, { estado }, { headers: { 'X-API-Key': import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026' } })
+  const response = await api.patch(`/estadias/${id}/status`, { estado }, { headers: authHeaders })
   return response.data
 }
 
@@ -190,7 +227,7 @@ export async function getDashboard(): Promise<ApiResponse<DashboardData>> {
   }
 }
 
-// ── Catalogs ──
+// ── Catalogs: Actividades ──
 
 export async function getActividades(): Promise<ApiResponse<Actividad[]>> {
   try {
@@ -200,6 +237,59 @@ export async function getActividades(): Promise<ApiResponse<Actividad[]>> {
     return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
   }
 }
+
+export async function getActividadById(id: number): Promise<ApiResponse<Actividad>> {
+  const response = await api.get(`/actividades/${id}`)
+  return response.data
+}
+
+export async function createActividad(data: Partial<Actividad>): Promise<ApiResponse<Actividad>> {
+  const response = await api.post('/actividades', data, { headers: authHeaders })
+  return response.data
+}
+
+export async function updateActividad(id: number, data: Partial<Actividad>): Promise<ApiResponse<Actividad>> {
+  const response = await api.put(`/actividades/${id}`, data, { headers: authHeaders })
+  return response.data
+}
+
+export async function deleteActividad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>> {
+  const response = await api.delete(`/actividades/${id}`, { headers: authHeaders })
+  return response.data
+}
+
+// ── Catalogs: Propiedades ──
+
+export async function getPropiedades(): Promise<ApiResponse<Propiedad[]>> {
+  try {
+    const response = await api.get('/propiedades')
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getPropiedadById(id: number): Promise<ApiResponse<Propiedad>> {
+  const response = await api.get(`/propiedades/${id}`)
+  return response.data
+}
+
+export async function createPropiedad(data: Partial<Propiedad>): Promise<ApiResponse<Propiedad>> {
+  const response = await api.post('/propiedades', data, { headers: authHeaders })
+  return response.data
+}
+
+export async function updatePropiedad(id: number, data: Partial<Propiedad>): Promise<ApiResponse<Propiedad>> {
+  const response = await api.put(`/propiedades/${id}`, data, { headers: authHeaders })
+  return response.data
+}
+
+export async function deletePropiedad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>> {
+  const response = await api.delete(`/propiedades/${id}`, { headers: authHeaders })
+  return response.data
+}
+
+// ── Staff ──
 
 export async function getStaff(): Promise<ApiResponse<Staff[]>> {
   try {
@@ -216,5 +306,25 @@ export async function getApiStatus() {
     return response.data
   } catch (err) {
     return { success: false, error: { code: 'OFFLINE', message: 'API no disponible' } }
+  }
+}
+
+// ── Charts & Calendar ──
+
+export async function getCharts(params: Record<string, string> = {}): Promise<ApiResponse<any>> {
+  try {
+    const response = await api.get('/charts', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: null, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getCalendarData(mes?: string): Promise<ApiResponse<any>> {
+  try {
+    const response = await api.get('/calendar', { params: mes ? { mes } : {} })
+    return response.data
+  } catch (err) {
+    return { success: false, data: null, error: { code: 'NETWORK', message: 'Error de conexión' } }
   }
 }

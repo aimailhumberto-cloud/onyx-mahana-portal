@@ -8,6 +8,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts'
+import { getDashboard, getCharts } from '../api/api'
 import type { DashboardData } from '../api/api'
 
 interface ChartData {
@@ -46,12 +47,11 @@ export default function Dashboard() {
     try {
       setLoading(true)
       const param = mes || ''
-      const dashUrl = param ? `/api/v1/dashboard?mes=${param}` : '/api/v1/dashboard'
-      const chartUrl = param ? `/api/v1/charts?mes=${param}` : '/api/v1/charts'
+      const chartParams: Record<string, string> = param ? { mes: param } : {}
 
       const [dashRes, chartRes] = await Promise.all([
-        fetch(dashUrl).then(r => r.json()),
-        fetch(chartUrl).then(r => r.json())
+        getDashboard(),
+        getCharts(chartParams)
       ])
 
       if (dashRes.success) {

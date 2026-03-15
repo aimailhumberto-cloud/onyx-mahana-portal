@@ -5,6 +5,8 @@ import ToursList from './components/ToursList'
 import TourForm from './components/TourForm'
 import EstadiasList from './components/EstadiasList'
 import EstadiaForm from './components/EstadiaForm'
+import CalendarView from './components/CalendarView'
+import Productos from './components/Productos'
 import AdminPanel from './components/AdminPanel'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -21,6 +23,8 @@ function App() {
             <Route path="estadias" element={<EstadiasList />} />
             <Route path="estadias/nuevo" element={<EstadiaForm />} />
             <Route path="estadias/:id/editar" element={<EstadiaForm />} />
+            <Route path="calendario" element={<CalendarView />} />
+            <Route path="productos" element={<Productos />} />
             <Route path="admin" element={<AdminPanel />} />
           </Route>
         </Routes>

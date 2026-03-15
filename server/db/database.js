@@ -28,6 +28,22 @@ function getDb() {
     // Rename Cancelada → Perdida in existing data
     db.prepare(`UPDATE reservas_estadias SET estado = 'Perdida' WHERE estado = 'Cancelada'`).run();
 
+    // ── Actividades: expand with product catalog fields ──
+    addCol('actividades', 'categoria', 'TEXT');
+    addCol('actividades', 'descripcion', 'TEXT');
+    addCol('actividades', 'unidad', 'TEXT');          // "Por pax", "Por bote"
+    addCol('actividades', 'duracion', 'TEXT');         // "2 horas", "Full day"
+    addCol('actividades', 'horario', 'TEXT');           // "8:00am, 2:00pm"
+    addCol('actividades', 'punto_encuentro', 'TEXT');
+    addCol('actividades', 'que_incluye', 'TEXT');       // "Water, Equipo, Foto"
+    addCol('actividades', 'que_llevar', 'TEXT');        // "Bloqueador, Toalla"
+    addCol('actividades', 'requisitos', 'TEXT');
+    addCol('actividades', 'disponibilidad', 'TEXT');    // "Todo el año"
+    addCol('actividades', 'costo_instructor', 'REAL');
+    addCol('actividades', 'comision_caracol_pct', 'REAL');
+    addCol('actividades', 'capacidad_max', 'INTEGER');
+    addCol('actividades', 'transporte', 'INTEGER');
+
     // Ensure actividades catalog has Otro and Academia de Surf
     const ensureAct = (nombre) => {
       try { db.prepare('INSERT INTO actividades (nombre, tipo) VALUES (?, ?)').run(nombre, 'tour'); } catch {}
@@ -35,14 +51,71 @@ function getDb() {
     ensureAct('Academia de Surf');
     ensureAct('Otro');
 
+    // Assign categories to existing activities (safe to run multiple times)
+    const setCat = (nombre, categoria) => {
+      db.prepare('UPDATE actividades SET categoria = ? WHERE nombre = ? AND (categoria IS NULL OR categoria = "")').run(categoria, nombre);
+    };
+    setCat('Academia de Surf', 'Acuática');
+    setCat('Mulita', 'Acuática');
+    setCat('Tour de Pesca Otoque y Bona', 'Acuática');
+    setCat('Tubing Inflable', 'Acuática');
+    setCat('Ratfing Tubing Cajones', 'Acuática');
+    setCat('Rafting Tubing Cajones', 'Acuática');
+    setCat('Rappel Cascada Filipinas', 'Eco Adventure');
+    setCat('Hiking Cerro Chame', 'Eco Adventure');
+    setCat('Tour Cascada Filipinas', 'Eco Adventure');
+    setCat('Day Trip El Valle de Antón', 'City Tour');
+    setCat('Escápate a Isla Otoque y Bona', 'City Tour');
+    setCat('Otro', 'Otro');
+
+    // ── Propiedades table ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS propiedades (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT NOT NULL UNIQUE,
+        descripcion TEXT,
+        tipo TEXT,
+        habitaciones INTEGER,
+        capacidad INTEGER,
+        precio_noche REAL,
+        impuesto_pct REAL DEFAULT 0,
+        cleaning_fee REAL DEFAULT 0,
+        amenidades TEXT,
+        activa INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Seed propiedades if empty
+    const propCount = db.prepare('SELECT COUNT(*) as c FROM propiedades').get();
+    if (propCount.c === 0) {
+      const insertProp = db.prepare('INSERT INTO propiedades (nombre, tipo, impuesto_pct, cleaning_fee, activa) VALUES (?, ?, ?, ?, 1)');
+      insertProp.run('Radisson', 'Hotel', 10, 0);
+      insertProp.run('Caracol Residences', 'Apartamento', 0, 0);
+      insertProp.run('Casa Mahana', 'Casa', 10, 0);
+      console.log('✅ Seeded 3 propiedades');
+    }
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;
 }
 
+// ── Table whitelist (prevents SQL injection via table names) ──
+
+const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff'];
+
+function validateTable(table) {
+  if (!VALID_TABLES.includes(table)) {
+    throw new Error(`Invalid table name: ${table}`);
+  }
+}
+
 // ── Generic CRUD Helpers ──
 
 function findAll(table, { where = {}, orderBy = 'id DESC', page = 1, limit = 50 } = {}) {
+  validateTable(table);
   const db = getDb();
   const conditions = [];
   const values = [];
@@ -88,11 +161,13 @@ function findAll(table, { where = {}, orderBy = 'id DESC', page = 1, limit = 50 
 }
 
 function findById(table, id) {
+  validateTable(table);
   const db = getDb();
   return db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
 }
 
 function create(table, data) {
+  validateTable(table);
   const db = getDb();
   const fields = Object.keys(data);
   const placeholders = fields.map(() => '?').join(', ');
@@ -106,6 +181,7 @@ function create(table, data) {
 }
 
 function update(table, id, data) {
+  validateTable(table);
   const db = getDb();
   data.updated_at = new Date().toISOString();
   const fields = Object.keys(data);
@@ -117,6 +193,7 @@ function update(table, id, data) {
 }
 
 function remove(table, id) {
+  validateTable(table);
   const db = getDb();
   const item = findById(table, id);
   if (!item) return null;

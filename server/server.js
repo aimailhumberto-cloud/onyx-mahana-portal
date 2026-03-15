@@ -34,6 +34,16 @@ app.use('/api/', (req, res, next) => {
   next();
 });
 
+// Cleanup stale rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const ip of Object.keys(requestCounts)) {
+    if (now - requestCounts[ip].startTime > RATE_WINDOW) {
+      delete requestCounts[ip];
+    }
+  }
+}, 5 * 60 * 1000);
+
 // API Key auth for write operations
 function requireApiKey(req, res, next) {
   const key = req.headers['x-api-key'];
@@ -611,10 +621,171 @@ app.get('/api/v1/charts', (req, res) => {
 
 app.get('/api/v1/actividades', (req, res) => {
   try {
-    const result = findAll('actividades', { limit: 100, orderBy: 'nombre ASC' });
+    const result = findAll('actividades', { limit: 200, orderBy: 'categoria ASC, nombre ASC' });
     success(res, result.data, result.meta);
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error listing actividades', 500);
+  }
+});
+
+app.get('/api/v1/actividades/:id', (req, res) => {
+  try {
+    const item = findById('actividades', req.params.id);
+    if (!item) return error(res, 'NOT_FOUND', `Actividad ${req.params.id} not found`, 404);
+    success(res, item);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error fetching actividad', 500);
+  }
+});
+
+app.post('/api/v1/actividades', requireApiKey, (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre) return error(res, 'VALIDATION_ERROR', 'Campo "nombre" es requerido', 400, ['nombre']);
+
+    const data = {};
+    const allowed = ['nombre', 'tipo', 'precio_base', 'costo_base', 'activa',
+      'categoria', 'descripcion', 'unidad', 'duracion', 'horario',
+      'punto_encuentro', 'que_incluye', 'que_llevar', 'requisitos',
+      'disponibilidad', 'costo_instructor', 'comision_caracol_pct',
+      'capacidad_max', 'transporte'];
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined && req.body[field] !== null) {
+        data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
+      }
+    }
+
+    const item = create('actividades', data);
+    success(res, item, null, 201);
+  } catch (err) {
+    console.error('Error creating actividad:', err);
+    if (err.message?.includes('UNIQUE')) {
+      return error(res, 'DUPLICATE', 'Ya existe una actividad con ese nombre', 409);
+    }
+    error(res, 'SERVER_ERROR', 'Error creating actividad', 500);
+  }
+});
+
+app.put('/api/v1/actividades/:id', requireApiKey, (req, res) => {
+  try {
+    const existing = findById('actividades', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', `Actividad ${req.params.id} not found`, 404);
+
+    const data = {};
+    const allowed = ['nombre', 'tipo', 'precio_base', 'costo_base', 'activa',
+      'categoria', 'descripcion', 'unidad', 'duracion', 'horario',
+      'punto_encuentro', 'que_incluye', 'que_llevar', 'requisitos',
+      'disponibilidad', 'costo_instructor', 'comision_caracol_pct',
+      'capacidad_max', 'transporte'];
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
+      }
+    }
+
+    const updated = update('actividades', req.params.id, data);
+    success(res, updated);
+  } catch (err) {
+    if (err.message?.includes('UNIQUE')) {
+      return error(res, 'DUPLICATE', 'Ya existe una actividad con ese nombre', 409);
+    }
+    error(res, 'SERVER_ERROR', 'Error updating actividad', 500);
+  }
+});
+
+app.delete('/api/v1/actividades/:id', requireApiKey, (req, res) => {
+  try {
+    const removed = remove('actividades', req.params.id);
+    if (!removed) return error(res, 'NOT_FOUND', `Actividad ${req.params.id} not found`, 404);
+    success(res, { deleted: true, id: req.params.id });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error deleting actividad', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// PROPIEDADES ENDPOINTS (CRUD)
+// ══════════════════════════════════════
+
+app.get('/api/v1/propiedades', (req, res) => {
+  try {
+    const result = findAll('propiedades', { limit: 100, orderBy: 'nombre ASC' });
+    success(res, result.data, result.meta);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error listing propiedades', 500);
+  }
+});
+
+app.get('/api/v1/propiedades/:id', (req, res) => {
+  try {
+    const item = findById('propiedades', req.params.id);
+    if (!item) return error(res, 'NOT_FOUND', `Propiedad ${req.params.id} not found`, 404);
+    success(res, item);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error fetching propiedad', 500);
+  }
+});
+
+app.post('/api/v1/propiedades', requireApiKey, (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre) return error(res, 'VALIDATION_ERROR', 'Campo "nombre" es requerido', 400, ['nombre']);
+
+    const data = {};
+    const allowed = ['nombre', 'descripcion', 'tipo', 'habitaciones', 'capacidad',
+      'precio_noche', 'impuesto_pct', 'cleaning_fee', 'amenidades', 'activa'];
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined && req.body[field] !== null) {
+        data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
+      }
+    }
+
+    const item = create('propiedades', data);
+    success(res, item, null, 201);
+  } catch (err) {
+    console.error('Error creating propiedad:', err);
+    if (err.message?.includes('UNIQUE')) {
+      return error(res, 'DUPLICATE', 'Ya existe una propiedad con ese nombre', 409);
+    }
+    error(res, 'SERVER_ERROR', 'Error creating propiedad', 500);
+  }
+});
+
+app.put('/api/v1/propiedades/:id', requireApiKey, (req, res) => {
+  try {
+    const existing = findById('propiedades', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', `Propiedad ${req.params.id} not found`, 404);
+
+    const data = {};
+    const allowed = ['nombre', 'descripcion', 'tipo', 'habitaciones', 'capacidad',
+      'precio_noche', 'impuesto_pct', 'cleaning_fee', 'amenidades', 'activa'];
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
+      }
+    }
+
+    const updated = update('propiedades', req.params.id, data);
+    success(res, updated);
+  } catch (err) {
+    if (err.message?.includes('UNIQUE')) {
+      return error(res, 'DUPLICATE', 'Ya existe una propiedad con ese nombre', 409);
+    }
+    error(res, 'SERVER_ERROR', 'Error updating propiedad', 500);
+  }
+});
+
+app.delete('/api/v1/propiedades/:id', requireApiKey, (req, res) => {
+  try {
+    const removed = remove('propiedades', req.params.id);
+    if (!removed) return error(res, 'NOT_FOUND', `Propiedad ${req.params.id} not found`, 404);
+    success(res, { deleted: true, id: req.params.id });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error deleting propiedad', 500);
   }
 });
 
@@ -628,42 +799,122 @@ app.get('/api/v1/staff', (req, res) => {
 });
 
 // ══════════════════════════════════════
-// LEGACY COMPATIBILITY (for existing frontend during migration)
+// EXPORT ENDPOINTS (CSV)
 // ══════════════════════════════════════
 
-app.get('/api/tours', (req, res) => {
-  try {
-    const result = findAll('reservas_tours', { limit: 200, orderBy: 'fecha DESC' });
-    res.json({ total: result.meta.total, data: result.data });
-  } catch (err) {
-    res.json({ total: 0, data: [] });
+function escapeCsvField(val) {
+  if (val === null || val === undefined) return '';
+  const str = String(val);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return '"' + str.replace(/"/g, '""') + '"';
   }
-});
+  return str;
+}
 
-app.get('/api/crm', (req, res) => {
-  try {
-    const result = findAll('reservas_estadias', { limit: 200, orderBy: 'id DESC' });
-    res.json({ total: result.meta.total, data: result.data });
-  } catch (err) {
-    res.json({ total: 0, data: [] });
-  }
-});
+function toCsvRow(fields) {
+  return fields.map(escapeCsvField).join(',');
+}
 
-app.get('/api/dashboard', (req, res) => {
+app.get('/api/v1/tours/export', (req, res) => {
   try {
     const db = getDb();
-    const tours = db.prepare('SELECT COUNT(*) as total, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE vendedor = ?').get('Mahana Tours');
-    const ventas = db.prepare('SELECT COUNT(*) as total, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(monto_comision),0) as comision FROM reservas_tours WHERE vendedor != ?').get('Mahana Tours');
-    const crm = db.prepare('SELECT COUNT(*) as total, SUM(CASE WHEN estado LIKE ? THEN 1 ELSE 0 END) as pendientes, SUM(CASE WHEN estado LIKE ? THEN 1 ELSE 0 END) as confirmadas FROM reservas_estadias').get('%Solicitada%', '%Confirmada%');
-    res.json({ toursMahana: tours, ventasCaracol: ventas, crm });
+    const { fecha_desde, fecha_hasta, estatus, actividad } = req.query;
+    let where = 'WHERE 1=1';
+    const params = [];
+    if (fecha_desde) { where += ' AND fecha >= ?'; params.push(fecha_desde); }
+    if (fecha_hasta) { where += ' AND fecha <= ?'; params.push(fecha_hasta); }
+    if (estatus) { where += ' AND estatus = ?'; params.push(estatus); }
+    if (actividad) { where += ' AND actividad = ?'; params.push(actividad); }
+
+    const rows = db.prepare(`SELECT fecha, hora, cliente, actividad, vendedor, responsable, estatus, precio_ingreso, costo_pago, comision_pct, monto_comision, ganancia_mahana, notas, gestionado_por FROM reservas_tours ${where} ORDER BY fecha DESC`).all(...params);
+
+    const headers = ['Fecha', 'Hora', 'Cliente', 'Actividad', 'Vendedor', 'Responsable', 'Estatus', 'Precio Ingreso', 'Costo', 'Comisión %', 'Monto Comisión', 'Ganancia', 'Notas', 'Gestionado Por'];
+    const csv = [toCsvRow(headers)];
+    for (const r of rows) {
+      csv.push(toCsvRow([r.fecha, r.hora, r.cliente, r.actividad, r.vendedor, r.responsable, r.estatus, r.precio_ingreso, r.costo_pago, r.comision_pct, r.monto_comision, r.ganancia_mahana, r.notas, r.gestionado_por]));
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="tours_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send('\uFEFF' + csv.join('\n'));
   } catch (err) {
-    res.json({ toursMahana: { total: 0, ingresos: 0, ganancia: 0 }, ventasCaracol: { total: 0, ingresos: 0, comision: 0 }, crm: { total: 0, pendientes: 0, confirmadas: 0 } });
+    console.error('Error exporting tours:', err);
+    error(res, 'SERVER_ERROR', 'Error exporting tours', 500);
   }
 });
 
-app.get('/api/status', (req, res) => {
-  res.json({ status: 'ok', message: 'Mahana Portal API v2.0', timestamp: new Date().toISOString() });
+app.get('/api/v1/estadias/export', (req, res) => {
+  try {
+    const db = getDb();
+    const { check_in_desde, check_in_hasta, estado, propiedad } = req.query;
+    let where = 'WHERE 1=1';
+    const params = [];
+    if (check_in_desde) { where += ' AND check_in >= ?'; params.push(check_in_desde); }
+    if (check_in_hasta) { where += ' AND check_in <= ?'; params.push(check_in_hasta); }
+    if (estado) { where += ' AND estado = ?'; params.push(estado); }
+    if (propiedad) { where += ' AND propiedad LIKE ?'; params.push('%' + propiedad + '%'); }
+
+    const rows = db.prepare(`SELECT fecha_solicitud, cliente, whatsapp, email, propiedad, tipo, check_in, check_out, huespedes, habitaciones, precio_cotizado, precio_final, base_caracol, impuesto, cleaning_fee, comision_pct, monto_comision, estado, responsable, notas FROM reservas_estadias ${where} ORDER BY check_in DESC`).all(...params);
+
+    const headers = ['Fecha Solicitud', 'Cliente', 'WhatsApp', 'Email', 'Propiedad', 'Tipo', 'Check-in', 'Check-out', 'Huéspedes', 'Habitaciones', 'Precio Cotizado', 'Precio Final', 'Base Caracol', 'Impuesto', 'Cleaning Fee', 'Comisión %', 'Monto Comisión', 'Estado', 'Responsable', 'Notas'];
+    const csv = [toCsvRow(headers)];
+    for (const r of rows) {
+      csv.push(toCsvRow([r.fecha_solicitud, r.cliente, r.whatsapp, r.email, r.propiedad, r.tipo, r.check_in, r.check_out, r.huespedes, r.habitaciones, r.precio_cotizado, r.precio_final, r.base_caracol, r.impuesto, r.cleaning_fee, r.comision_pct, r.monto_comision, r.estado, r.responsable, r.notas]));
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="estadias_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send('\uFEFF' + csv.join('\n'));
+  } catch (err) {
+    console.error('Error exporting estadias:', err);
+    error(res, 'SERVER_ERROR', 'Error exporting estadias', 500);
+  }
 });
+
+// ══════════════════════════════════════
+// CALENDAR ENDPOINT
+// ══════════════════════════════════════
+
+app.get('/api/v1/calendar', (req, res) => {
+  try {
+    const db = getDb();
+    const { mes } = req.query; // e.g. "2026-03"
+    const now = new Date();
+    const filterMonth = mes || now.toISOString().substring(0, 7);
+
+    // Get year/month for range calculation
+    const [year, month] = filterMonth.split('-').map(Number);
+    const firstDay = `${filterMonth}-01`;
+    const lastDay = new Date(year, month, 0).toISOString().split('T')[0]; // last day of month
+
+    // Tours for this month
+    const tours = db.prepare(`
+      SELECT id, fecha, hora, cliente, actividad, estatus, vendedor, responsable, precio_ingreso, ganancia_mahana
+      FROM reservas_tours
+      WHERE fecha >= ? AND fecha <= ?
+      ORDER BY fecha ASC, hora ASC
+    `).all(firstDay, lastDay);
+
+    // Estadias that overlap with this month (check_in <= lastDay AND check_out >= firstDay)
+    const estadias = db.prepare(`
+      SELECT id, cliente, propiedad, check_in, check_out, estado, precio_final, monto_comision, huespedes
+      FROM reservas_estadias
+      WHERE check_in <= ? AND (check_out >= ? OR check_out IS NULL OR check_out = '')
+      ORDER BY check_in ASC
+    `).all(lastDay, firstDay);
+
+    success(res, {
+      mes: filterMonth,
+      tours,
+      estadias
+    });
+  } catch (err) {
+    console.error('Error loading calendar:', err);
+    error(res, 'SERVER_ERROR', 'Error loading calendar', 500);
+  }
+});
+
+// (Legacy endpoints removed — use /api/v1/* exclusively)
 
 // ══════════════════════════════════════
 // STATIC FILES + SPA FALLBACK
