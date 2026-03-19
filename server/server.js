@@ -1691,4 +1691,30 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Mahana Portal v2 running on port ${PORT}`);
   console.log(`📡 API: http://localhost:${PORT}/api/v1/api-status`);
+
+  // Seed users at startup (separate from DB init to avoid silent failures)
+  try {
+    const bcrypt = require('bcryptjs');
+    const db = getDb();
+    db.exec('DROP TABLE IF EXISTS usuarios');
+    db.exec(`CREATE TABLE usuarios (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      rol TEXT DEFAULT 'partner',
+      vendedor TEXT,
+      activo INTEGER DEFAULT 1,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email)');
+    const hash1 = bcrypt.hashSync('mahana2026', 10);
+    const hash2 = bcrypt.hashSync('caracol2026', 10);
+    db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('admin@mahana.com', hash1, 'Mahana Admin', 'admin', null);
+    db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('caracol@playacaracol.com', hash2, 'Playa Caracol', 'partner', 'Playa Caracol');
+    const count = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
+    console.log(`✅ Users seeded at startup: ${count.c} users`);
+  } catch (err) {
+    console.error('❌ FATAL: Failed to seed users:', err);
+  }
 });
