@@ -250,8 +250,15 @@ function create(table, data) {
 function update(table, id, data) {
   validateTable(table);
   const db = getDb();
-  data.updated_at = new Date().toISOString();
+  // Only add updated_at if the table actually has that column
+  try {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (cols.some(c => c.name === 'updated_at')) {
+      data.updated_at = new Date().toISOString();
+    }
+  } catch {}
   const fields = Object.keys(data);
+  if (fields.length === 0) return findById(table, id);
   const setClause = fields.map(f => `${f} = ?`).join(', ');
   const values = [...Object.values(data), id];
 

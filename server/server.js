@@ -1246,10 +1246,11 @@ app.put('/api/v1/actividades/:id', requireApiKey, (req, res) => {
     const updated = update('actividades', req.params.id, data);
     success(res, updated);
   } catch (err) {
+    console.error('Error updating actividad:', err.message, err.stack);
     if (err.message?.includes('UNIQUE')) {
       return error(res, 'DUPLICATE', 'Ya existe una actividad con ese nombre', 409);
     }
-    error(res, 'SERVER_ERROR', 'Error updating actividad', 500);
+    error(res, 'SERVER_ERROR', 'Error updating actividad: ' + err.message, 500);
   }
 });
 
