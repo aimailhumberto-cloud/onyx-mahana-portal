@@ -117,12 +117,52 @@ app.get('/api/v1/debug-users', requireApiKey, (req, res) => {
     const db = getDb();
     const users = db.prepare('SELECT id, email, nombre, rol, vendedor, activo FROM usuarios').all();
     const dbPath = db.name;
-    // Test bcrypt
     const testHash = require('bcryptjs').hashSync('test123', 10);
     const testVerify = require('bcryptjs').compareSync('test123', testHash);
-    // Check table info
     const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='usuarios'").get();
     success(res, { dbPath, users, count: users.length, bcryptWorks: testVerify, tableSchema: tableInfo?.sql });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
+  }
+});
+
+// TEMPORARY: POST to seed users on demand
+app.post('/api/v1/debug-seed', requireApiKey, (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const db = getDb();
+    const steps = [];
+    
+    // Step 1: Check current state
+    const before = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
+    steps.push(`Before: ${before.c} users`);
+    
+    // Step 2: Delete all
+    const delResult = db.prepare('DELETE FROM usuarios').run();
+    steps.push(`Deleted: ${delResult.changes} rows`);
+    
+    // Step 3: Hash passwords
+    const h1 = bcrypt.hashSync('mahana2026', 10);
+    const h2 = bcrypt.hashSync('caracol2026', 10);
+    steps.push(`Hashed: h1=${h1.substring(0,20)}... h2=${h2.substring(0,20)}...`);
+    
+    // Step 4: Insert
+    const ins1 = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('admin@mahana.com', h1, 'Mahana Admin', 'admin', null);
+    steps.push(`Insert1: lastInsertRowid=${ins1.lastInsertRowid}, changes=${ins1.changes}`);
+    
+    const ins2 = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('caracol@playacaracol.com', h2, 'Playa Caracol', 'partner', 'Playa Caracol');
+    steps.push(`Insert2: lastInsertRowid=${ins2.lastInsertRowid}, changes=${ins2.changes}`);
+    
+    // Step 5: Verify
+    const after = db.prepare('SELECT id, email, nombre, rol, activo FROM usuarios').all();
+    steps.push(`After: ${after.length} users`);
+    
+    // Step 6: Test login
+    const admin = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get('admin@mahana.com');
+    const loginWorks = admin ? bcrypt.compareSync('mahana2026', admin.password_hash) : false;
+    steps.push(`Login test: user_found=${!!admin}, password_match=${loginWorks}`);
+    
+    success(res, { steps, users: after, loginWorks });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message, stack: err.stack });
   }
