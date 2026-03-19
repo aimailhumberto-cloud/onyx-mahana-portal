@@ -142,15 +142,14 @@ function getDb() {
       console.log('✅ Seeded 3 propiedades');
     }
 
-    // Seed usuarios if empty
-    // Ensure admin and partner users always exist with known credentials
-    const upsertUser = db.prepare(`
-      INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, nombre = excluded.nombre, rol = excluded.rol, vendedor = excluded.vendedor
-    `);
-    upsertUser.run('admin@mahana.com', hashPassword('mahana2026'), 'Mahana Admin', 'admin', null);
-    upsertUser.run('caracol@playacaracol.com', hashPassword('caracol2026'), 'Playa Caracol', 'partner', 'Playa Caracol');
+    // ALWAYS ensure known users exist with correct credentials
+    // Wipe and re-seed to handle any legacy DB state from other agents
+    db.prepare('DELETE FROM usuarios').run();
+    const insertUser = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor, activo) VALUES (?, ?, ?, ?, ?, 1)');
+    insertUser.run('admin@mahana.com', hashPassword('mahana2026'), 'Mahana Admin', 'admin', null);
+    insertUser.run('caracol@playacaracol.com', hashPassword('caracol2026'), 'Playa Caracol', 'partner', 'Playa Caracol');
+    const userCount = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
+    console.log(`✅ Users seeded: ${userCount.c} users in DB`);
 
     console.log('✅ Database initialized at', DB_PATH);
   }
