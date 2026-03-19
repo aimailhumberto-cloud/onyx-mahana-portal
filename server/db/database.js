@@ -143,18 +143,14 @@ function getDb() {
     }
 
     // Seed usuarios if empty
-    const userCount = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
-    if (userCount.c === 0) {
-      const insertUser = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)');
-      insertUser.run('admin@mahana.com', hashPassword('mahana2026'), 'Mahana Admin', 'admin', null);
-      insertUser.run('caracol@playacaracol.com', hashPassword('caracol2026'), 'Playa Caracol', 'partner', 'Playa Caracol');
-      console.log('✅ Seeded 2 users (admin + partner)');
-    } else {
-      // Ensure known credentials work (reset passwords on existing users)
-      const resetPw = db.prepare('UPDATE usuarios SET password_hash = ? WHERE email = ?');
-      resetPw.run(hashPassword('mahana2026'), 'admin@mahana.com');
-      resetPw.run(hashPassword('caracol2026'), 'caracol@playacaracol.com');
-    }
+    // Ensure admin and partner users always exist with known credentials
+    const upsertUser = db.prepare(`
+      INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(email) DO UPDATE SET password_hash = excluded.password_hash, nombre = excluded.nombre, rol = excluded.rol, vendedor = excluded.vendedor
+    `);
+    upsertUser.run('admin@mahana.com', hashPassword('mahana2026'), 'Mahana Admin', 'admin', null);
+    upsertUser.run('caracol@playacaracol.com', hashPassword('caracol2026'), 'Playa Caracol', 'partner', 'Playa Caracol');
 
     console.log('✅ Database initialized at', DB_PATH);
   }
