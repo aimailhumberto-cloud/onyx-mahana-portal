@@ -181,10 +181,10 @@ app.get('/api/v1/tours', requireAuth, (req, res) => {
       where.vendedor_like = vendedor;
     }
 
-    const result = findAll('reservas_tours', { where, page: Number(page), limit: Number(limit), orderBy: 'fecha DESC, hora DESC' });
+    // Exclude soft-deleted tours from query (so meta.total is correct)
+    where.eliminado = 0;
 
-    // Filter out soft-deleted tours
-    result.data = result.data.filter(t => !t.eliminado);
+    const result = findAll('reservas_tours', { where, page: Number(page), limit: Number(limit), orderBy: 'fecha DESC, hora DESC' });
 
     // Strip internal financial data for partners (they see costo_pago + comision, not precio_ingreso/ganancia)
     if (isPartner(req)) {
@@ -585,7 +585,7 @@ app.get('/api/v1/dashboard', (req, res) => {
           CASE 
             WHEN estatus IN ('Rechazado','Cancelado') THEN 0
             WHEN monto_comision IS NOT NULL AND monto_comision > 0 THEN monto_comision
-            WHEN costo_pago IS NOT NULL AND comision_pct IS NOT NULL THEN costo_pago * comision_pct / 100.0
+            WHEN precio_ingreso IS NOT NULL AND comision_pct IS NOT NULL THEN precio_ingreso * comision_pct / 100.0
             ELSE 0 
           END
         ), 0) as comisiones
