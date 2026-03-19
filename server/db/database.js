@@ -45,6 +45,22 @@ function getDb() {
     addCol('reservas_tours', 'eliminado_por', 'TEXT');
     addCol('reservas_tours', 'eliminado_at', 'TEXT');
 
+    // Product catalog columns for actividades
+    addCol('actividades', 'categoria', 'TEXT');
+    addCol('actividades', 'descripcion', 'TEXT');
+    addCol('actividades', 'unidad', 'TEXT');
+    addCol('actividades', 'duracion', 'TEXT');
+    addCol('actividades', 'horario', 'TEXT');
+    addCol('actividades', 'punto_encuentro', 'TEXT');
+    addCol('actividades', 'que_incluye', 'TEXT');
+    addCol('actividades', 'que_llevar', 'TEXT');
+    addCol('actividades', 'requisitos', 'TEXT');
+    addCol('actividades', 'disponibilidad', 'TEXT');
+    addCol('actividades', 'costo_instructor', 'REAL');
+    addCol('actividades', 'comision_caracol_pct', 'REAL');
+    addCol('actividades', 'capacidad_max', 'INTEGER');
+    addCol('actividades', 'transporte', 'INTEGER DEFAULT 0');
+
     // Product image support
     addCol('actividades', 'imagen_url', 'TEXT');
 
