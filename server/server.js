@@ -2,16 +2,41 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { getDb, findAll, findById, create, update, remove } = require('./db/database');
+const { verifyPassword, generateToken, requireAuth, requireRole, isPartner } = require('./auth');
+
+// ── Multer config for file uploads ──
+const uploadsDir = path.join(__dirname, '../uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+    cb(null, uniqueName);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowed = /\.(jpg|jpeg|png|gif|webp|pdf)$/i;
+    if (allowed.test(path.extname(file.originalname))) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes (jpg, png, gif, webp) o PDF'));
+  }
+});
 
 const app = express();
-const PORT = process.env.PORT || 3100;
+const PORT = process.env.PORT || 3101;
 const API_KEY = process.env.API_KEY || 'mahana-dev-key-2026';
 
 // ── Middleware ──
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use('/uploads', express.static(uploadsDir));
 
 // Rate limiting
 const requestCounts = {};
@@ -87,26 +112,106 @@ app.get('/api/v1/api-status', (req, res) => {
 });
 
 // ══════════════════════════════════════
+// AUTH ENDPOINTS
+// ══════════════════════════════════════
+
+app.post('/api/v1/auth/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return error(res, 'VALIDATION_ERROR', 'Email y contraseña son requeridos', 400);
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get(email.toLowerCase().trim());
+    if (!user) {
+      return error(res, 'AUTH_FAILED', 'Credenciales inválidas', 401);
+    }
+
+    if (!verifyPassword(password, user.password_hash)) {
+      return error(res, 'AUTH_FAILED', 'Credenciales inválidas', 401);
+    }
+
+    const token = generateToken(user);
+    success(res, {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        nombre: user.nombre,
+        rol: user.rol,
+        vendedor: user.vendedor
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    error(res, 'SERVER_ERROR', 'Error en login', 500);
+  }
+});
+
+app.get('/api/v1/auth/me', requireAuth, (req, res) => {
+  success(res, {
+    id: req.user.id,
+    email: req.user.email,
+    nombre: req.user.nombre,
+    rol: req.user.rol,
+    vendedor: req.user.vendedor
+  });
+});
+
+// ══════════════════════════════════════
 // TOURS ENDPOINTS
 // ══════════════════════════════════════
 
-app.get('/api/v1/tours', (req, res) => {
+app.get('/api/v1/tours', requireAuth, (req, res) => {
   try {
     const { estatus, actividad, responsable, vendedor, fecha_desde, fecha_hasta, cliente, page = 1, limit = 50 } = req.query;
     const where = {};
     if (estatus) where.estatus = estatus;
     if (actividad) where.actividad = actividad;
     if (responsable) where.responsable_like = responsable;
-    if (vendedor) where.vendedor_like = vendedor;
     if (cliente) where.cliente_like = cliente;
     if (fecha_desde) where.fecha_gte = fecha_desde;
     if (fecha_hasta) where.fecha_lte = fecha_hasta;
 
+    // Partner scoping: only see their own tours
+    if (isPartner(req)) {
+      where.vendedor = req.user.vendedor;
+    } else if (vendedor) {
+      where.vendedor_like = vendedor;
+    }
+
     const result = findAll('reservas_tours', { where, page: Number(page), limit: Number(limit), orderBy: 'fecha DESC, hora DESC' });
+
+    // Filter out soft-deleted tours
+    result.data = result.data.filter(t => !t.eliminado);
+
+    // Strip internal financial data for partners (they see costo_pago + comision, not precio_ingreso/ganancia)
+    if (isPartner(req)) {
+      result.data = result.data.map(t => {
+        const { precio_ingreso, ganancia_mahana, ...safe } = t;
+        return safe;
+      });
+    }
+
     success(res, result.data, result.meta);
   } catch (err) {
     console.error('Error listing tours:', err);
     error(res, 'SERVER_ERROR', 'Error listing tours', 500);
+  }
+});
+
+// Soft-deleted tours audit log (admin only)
+app.get('/api/v1/tours/deleted', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const deleted = db.prepare(`
+      SELECT * FROM reservas_tours WHERE eliminado = 1 ORDER BY eliminado_at DESC LIMIT 100
+    `).all();
+    success(res, deleted);
+  } catch (err) {
+    console.error('Error fetching deleted tours:', err);
+    error(res, 'SERVER_ERROR', 'Error fetching deleted tours', 500);
   }
 });
 
@@ -120,7 +225,28 @@ app.get('/api/v1/tours/:id', (req, res) => {
   }
 });
 
-app.post('/api/v1/tours', requireApiKey, (req, res) => {
+// Soft delete tour (admin only)
+app.delete('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const tour = findById('reservas_tours', req.params.id);
+    if (!tour) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
+    if (tour.eliminado) return error(res, 'ALREADY_DELETED', 'Tour ya fue eliminado', 400);
+
+    db.prepare(`
+      UPDATE reservas_tours 
+      SET eliminado = 1, eliminado_por = ?, eliminado_at = datetime('now')
+      WHERE id = ?
+    `).run(req.user.nombre || req.user.email, req.params.id);
+
+    success(res, { id: tour.id, eliminado: true, eliminado_por: req.user.nombre, eliminado_at: new Date().toISOString() });
+  } catch (err) {
+    console.error('Error deleting tour:', err);
+    error(res, 'SERVER_ERROR', 'Error deleting tour', 500);
+  }
+});
+
+app.post('/api/v1/tours', requireAuth, (req, res) => {
   try {
     const { cliente, actividad, fecha } = req.body;
     const missing = [];
@@ -134,12 +260,27 @@ app.post('/api/v1/tours', requireApiKey, (req, res) => {
     const data = {};
     const allowed = ['fecha', 'hora', 'cliente', 'whatsapp', 'estatus', 'vendedor', 'actividad',
       'responsable', 'precio_ingreso', 'costo_pago', 'comision_pct', 'monto_comision',
-      'ganancia_mahana', 'notas', 'gestionado_por', 'fuente'];
+      'ganancia_mahana', 'notas', 'gestionado_por', 'fuente',
+      'comprobante_url', 'email_cliente', 'hotel', 'nacionalidad', 'idioma', 'edades',
+      'solicitado_por', 'pax'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined && req.body[field] !== null) {
         data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
       }
+    }
+
+    // Partner scoping: force their vendedor, source, and 'Por Aprobar' status
+    if (isPartner(req)) {
+      data.vendedor = req.user.vendedor;
+      data.fuente = 'partner-portal';
+      data.estatus = 'Por Aprobar';
+      // Don't allow partners to set financial fields
+      delete data.precio_ingreso;
+      delete data.costo_pago;
+      delete data.comision_pct;
+      delete data.monto_comision;
+      delete data.ganancia_mahana;
     }
 
     // Auto-calculate ganancia if not provided
@@ -152,7 +293,39 @@ app.post('/api/v1/tours', requireApiKey, (req, res) => {
 
     if (!data.fuente) data.fuente = 'api';
 
+    // Try to decrement slot if slot_id provided
+    if (req.body.slot_id) {
+      const db = getDb();
+      const slot = db.prepare('SELECT * FROM horarios_slots WHERE id = ? AND bloqueado = 0').get(req.body.slot_id);
+      if (!slot) {
+        return error(res, 'SLOT_NOT_FOUND', 'Horario no disponible', 400);
+      }
+      const pax = parseInt(req.body.pax) || 1;
+      if (slot.reservados + pax > slot.capacidad) {
+        return error(res, 'SLOT_FULL', `Solo quedan ${slot.capacidad - slot.reservados} cupos`, 400);
+      }
+      db.prepare('UPDATE horarios_slots SET reservados = reservados + ? WHERE id = ?').run(pax, slot.id);
+    }
+
     const tour = create('reservas_tours', data);
+
+    // Auto-create alert for partner submissions
+    if (isPartner(req)) {
+      try {
+        const db = getDb();
+        db.prepare(`INSERT INTO alertas (tipo, mensaje, referencia_tipo, referencia_id, datos_extra)
+          VALUES (?, ?, ?, ?, ?)`).run(
+          'tour_nuevo',
+          `Nuevo tour solicitado por ${req.user.vendedor}: ${data.actividad} para ${data.cliente} el ${data.fecha}`,
+          'tour',
+          tour.id,
+          JSON.stringify({ vendedor: req.user.vendedor, actividad: data.actividad, cliente: data.cliente, comprobante: data.comprobante_url || null })
+        );
+      } catch (alertErr) {
+        console.error('Error creating alert:', alertErr);
+      }
+    }
+
     success(res, tour, null, 201);
   } catch (err) {
     console.error('Error creating tour:', err);
@@ -160,7 +333,7 @@ app.post('/api/v1/tours', requireApiKey, (req, res) => {
   }
 });
 
-app.put('/api/v1/tours/:id', requireApiKey, (req, res) => {
+app.put('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const existing = findById('reservas_tours', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
@@ -168,7 +341,9 @@ app.put('/api/v1/tours/:id', requireApiKey, (req, res) => {
     const data = {};
     const allowed = ['fecha', 'hora', 'cliente', 'whatsapp', 'estatus', 'vendedor', 'actividad',
       'responsable', 'precio_ingreso', 'costo_pago', 'comision_pct', 'monto_comision',
-      'ganancia_mahana', 'notas', 'gestionado_por'];
+      'ganancia_mahana', 'notas', 'gestionado_por',
+      'comprobante_url', 'email_cliente', 'hotel', 'nacionalidad', 'idioma', 'edades',
+      'solicitado_por', 'pax'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined) {
@@ -183,12 +358,12 @@ app.put('/api/v1/tours/:id', requireApiKey, (req, res) => {
   }
 });
 
-app.patch('/api/v1/tours/:id/status', requireApiKey, (req, res) => {
+app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const { estatus } = req.body;
     if (!estatus) return error(res, 'VALIDATION_ERROR', 'Field "estatus" is required', 400, ['estatus']);
 
-    const valid = ['Consulta', 'Reservado', 'Pagado', 'Cancelado', 'Cerrado'];
+    const valid = ['Consulta', 'Reservado', 'Pagado', 'Cancelado', 'Cerrado', 'Aprobado', 'Por Aprobar', 'Rechazado'];
     if (!valid.includes(estatus)) {
       return error(res, 'VALIDATION_ERROR', `Invalid estatus. Valid: ${valid.join(', ')}`, 400, ['estatus']);
     }
@@ -203,7 +378,7 @@ app.patch('/api/v1/tours/:id/status', requireApiKey, (req, res) => {
   }
 });
 
-app.delete('/api/v1/tours/:id', requireApiKey, (req, res) => {
+app.delete('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const removed = remove('reservas_tours', req.params.id);
     if (!removed) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
@@ -384,29 +559,37 @@ app.get('/api/v1/dashboard', (req, res) => {
     const tours = db.prepare(`
       SELECT 
         COUNT(*) as total,
-        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as ingresos,
-        COALESCE(SUM(CASE WHEN ganancia_mahana IS NOT NULL THEN ganancia_mahana ELSE 0 END), 0) as ganancia,
+        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL AND estatus NOT IN ('Rechazado','Cancelado') THEN precio_ingreso ELSE 0 END), 0) as ingresos,
+        COALESCE(SUM(CASE WHEN ganancia_mahana IS NOT NULL AND estatus NOT IN ('Rechazado','Cancelado') THEN ganancia_mahana ELSE 0 END), 0) as ganancia,
         SUM(CASE WHEN estatus = 'Pagado' THEN 1 ELSE 0 END) as pagados,
         SUM(CASE WHEN estatus = 'Reservado' THEN 1 ELSE 0 END) as reservados,
-        SUM(CASE WHEN estatus = 'Consulta' THEN 1 ELSE 0 END) as consultas
+        SUM(CASE WHEN estatus = 'Consulta' THEN 1 ELSE 0 END) as consultas,
+        SUM(CASE WHEN estatus = 'Por Aprobar' THEN 1 ELSE 0 END) as por_aprobar
       FROM reservas_tours
-      WHERE 1=1 ${tourDateFilter}
+      WHERE (eliminado IS NULL OR eliminado = 0) ${tourDateFilter}
     `).get(...tourDateParams);
 
     const toursMahana = db.prepare(`
       SELECT 
         COUNT(*) as total,
-        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as ingresos,
-        COALESCE(SUM(CASE WHEN ganancia_mahana IS NOT NULL THEN ganancia_mahana ELSE 0 END), 0) as ganancia
-      FROM reservas_tours WHERE vendedor = 'Mahana Tours' ${tourDateFilter}
+        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL AND estatus NOT IN ('Rechazado','Cancelado') THEN precio_ingreso ELSE 0 END), 0) as ingresos,
+        COALESCE(SUM(CASE WHEN ganancia_mahana IS NOT NULL AND estatus NOT IN ('Rechazado','Cancelado') THEN ganancia_mahana ELSE 0 END), 0) as ganancia
+      FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = 'Mahana Tours' ${tourDateFilter}
     `).get(...tourDateParams);
 
     const ventasPartners = db.prepare(`
       SELECT 
         COUNT(*) as total,
-        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as ingresos,
-        COALESCE(SUM(CASE WHEN monto_comision IS NOT NULL THEN monto_comision ELSE 0 END), 0) as comisiones
-      FROM reservas_tours WHERE vendedor != 'Mahana Tours' ${tourDateFilter}
+        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL AND estatus NOT IN ('Rechazado','Cancelado') THEN precio_ingreso ELSE 0 END), 0) as ingresos,
+        COALESCE(SUM(
+          CASE 
+            WHEN estatus IN ('Rechazado','Cancelado') THEN 0
+            WHEN monto_comision IS NOT NULL AND monto_comision > 0 THEN monto_comision
+            WHEN costo_pago IS NOT NULL AND comision_pct IS NOT NULL THEN costo_pago * comision_pct / 100.0
+            ELSE 0 
+          END
+        ), 0) as comisiones
+      FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor != 'Mahana Tours' ${tourDateFilter}
     `).get(...tourDateParams);
 
     const estadias = db.prepare(`
@@ -421,7 +604,7 @@ app.get('/api/v1/dashboard', (req, res) => {
 
     const hoy = new Date().toISOString().split('T')[0];
     const toursHoy = db.prepare(`
-      SELECT COUNT(*) as total FROM reservas_tours WHERE fecha = ?
+      SELECT COUNT(*) as total FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND fecha = ?
     `).get(hoy);
 
     // Recientes filtered by month too
@@ -430,7 +613,7 @@ app.get('/api/v1/dashboard', (req, res) => {
       recientesQuery = db.prepare(`
         SELECT 'tour' as tipo, id, cliente, actividad as descripcion, fecha, estatus as estado, 
                precio_ingreso as monto, fuente, created_at
-        FROM reservas_tours
+        FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0)
         UNION ALL
         SELECT 'estadia' as tipo, id, cliente, propiedad as descripcion, check_in as fecha, estado, 
                precio_final as monto, fuente, created_at
@@ -441,7 +624,7 @@ app.get('/api/v1/dashboard', (req, res) => {
       recientesQuery = db.prepare(`
         SELECT 'tour' as tipo, id, cliente, actividad as descripcion, fecha, estatus as estado, 
                precio_ingreso as monto, fuente, created_at
-        FROM reservas_tours WHERE substr(fecha, 1, 4) = ?
+        FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND substr(fecha, 1, 4) = ?
         UNION ALL
         SELECT 'estadia' as tipo, id, cliente, propiedad as descripcion, check_in as fecha, estado, 
                precio_final as monto, fuente, created_at
@@ -452,7 +635,7 @@ app.get('/api/v1/dashboard', (req, res) => {
       recientesQuery = db.prepare(`
         SELECT 'tour' as tipo, id, cliente, actividad as descripcion, fecha, estatus as estado, 
                precio_ingreso as monto, fuente, created_at
-        FROM reservas_tours WHERE substr(fecha, 1, 7) = ?
+        FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND substr(fecha, 1, 7) = ?
         UNION ALL
         SELECT 'estadia' as tipo, id, cliente, propiedad as descripcion, check_in as fecha, estado, 
                precio_final as monto, fuente, created_at
@@ -486,7 +669,8 @@ app.get('/api/v1/dashboard', (req, res) => {
       tours_por_estatus: {
         pagados: tours.pagados,
         reservados: tours.reservados,
-        consultas: tours.consultas
+        consultas: tours.consultas,
+        por_aprobar: tours.por_aprobar || 0
       },
       recientes: recientesQuery,
       mesActual: currentMonth,
@@ -496,6 +680,331 @@ app.get('/api/v1/dashboard', (req, res) => {
   } catch (err) {
     console.error('Error loading dashboard:', err);
     error(res, 'SERVER_ERROR', 'Error loading dashboard', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// PARTNER DASHBOARD
+// ══════════════════════════════════════
+
+app.get('/api/v1/partner/dashboard', requireAuth, (req, res) => {
+  try {
+    if (!isPartner(req)) {
+      return error(res, 'FORBIDDEN', 'Solo disponible para partners', 403);
+    }
+
+    const db = getDb();
+    const vendedor = req.user.vendedor;
+    const { mes } = req.query;
+
+    const now = new Date();
+    const currentMonth = now.toISOString().substring(0, 7);
+    const filterMonth = mes || currentMonth;
+    const isAll = filterMonth === 'todo';
+    const isYear = !isAll && filterMonth.length === 4;
+
+    let dateFilter = '';
+    let dateParams = [];
+    if (!isAll) {
+      if (isYear) {
+        dateFilter = "AND substr(fecha, 1, 4) = ?";
+        dateParams = [filterMonth];
+      } else {
+        dateFilter = "AND substr(fecha, 1, 7) = ?";
+        dateParams = [filterMonth];
+      }
+    }
+
+    // KPIs: precio_ingreso (tour price), ITBM, comisión Caracol
+    // Only count non-rejected tours in financial totals
+    const kpis = db.prepare(`
+      SELECT 
+        COUNT(*) as total_tours,
+        COALESCE(SUM(CASE WHEN precio_ingreso IS NOT NULL AND estatus NOT IN ('Rechazado','Cancelado') THEN precio_ingreso ELSE 0 END), 0) as total_precio,
+        COALESCE(SUM(
+          CASE 
+            WHEN estatus IN ('Rechazado','Cancelado') THEN 0
+            WHEN monto_comision IS NOT NULL AND monto_comision > 0 THEN monto_comision
+            WHEN precio_ingreso IS NOT NULL AND comision_pct IS NOT NULL THEN precio_ingreso * comision_pct / 100.0
+            ELSE 0 
+          END
+        ), 0) as total_comision,
+        SUM(CASE WHEN estatus = 'Aprobado' THEN 1 ELSE 0 END) as aprobados,
+        SUM(CASE WHEN estatus = 'Reservado' OR estatus = 'Pagado' THEN 1 ELSE 0 END) as reservados,
+        SUM(CASE WHEN estatus = 'Por Aprobar' THEN 1 ELSE 0 END) as por_aprobar,
+        SUM(CASE WHEN estatus = 'Rechazado' THEN 1 ELSE 0 END) as rechazados,
+        COALESCE(SUM(CASE WHEN estatus = 'Por Aprobar' AND precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as monto_por_aprobar,
+        COALESCE(SUM(CASE WHEN estatus = 'Aprobado' AND precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as monto_aprobados,
+        COALESCE(SUM(CASE WHEN (estatus = 'Reservado' OR estatus = 'Pagado') AND precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as monto_reservados,
+        COALESCE(SUM(CASE WHEN estatus = 'Rechazado' AND precio_ingreso IS NOT NULL THEN precio_ingreso ELSE 0 END), 0) as monto_rechazados
+      FROM reservas_tours
+      WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = ? ${dateFilter}
+    `).get(vendedor, ...dateParams);
+
+    // ITBM = 7% del precio total (excluding rejected)
+    const itbm = Math.round((kpis.total_precio * 0.07) * 100) / 100;
+    // Monto Pagado = precio del tour (before ITBM, excluding rejected)
+    const totalPagado = Math.round(kpis.total_precio * 100) / 100;
+
+    // Top tours (actividades más solicitadas)
+    const topTours = db.prepare(`
+      SELECT 
+        actividad as nombre,
+        COUNT(*) as cantidad,
+        COALESCE(SUM(costo_pago), 0) as monto
+      FROM reservas_tours
+      WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = ? AND actividad IS NOT NULL AND actividad != '' ${dateFilter}
+      GROUP BY actividad
+      ORDER BY cantidad DESC
+      LIMIT 5
+    `).all(vendedor, ...dateParams);
+
+    // Clientes recientes (últimos 5 únicos)
+    const clientesRecientes = db.prepare(`
+      SELECT cliente, actividad, fecha, estatus, costo_pago, whatsapp
+      FROM reservas_tours
+      WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = ? AND cliente IS NOT NULL AND cliente != ''
+      ORDER BY created_at DESC
+      LIMIT 20
+    `).all(vendedor);
+
+    // Deduplicate by client name, keep only first (most recent)
+    const seen = new Set();
+    const uniqueClientes = [];
+    for (const c of clientesRecientes) {
+      if (!seen.has(c.cliente)) {
+        seen.add(c.cliente);
+        uniqueClientes.push(c);
+        if (uniqueClientes.length >= 5) break;
+      }
+    }
+
+    // Monthly revenue chart (last 12 months, always unfiltered for chart continuity)
+    const ingresosPorMes = db.prepare(`
+      SELECT 
+        substr(fecha, 1, 7) as mes,
+        COUNT(*) as cantidad,
+        COALESCE(SUM(costo_pago), 0) as ingresos,
+        COALESCE(SUM(monto_comision), 0) as comision
+      FROM reservas_tours
+      WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = ? AND fecha IS NOT NULL AND fecha != ''
+      GROUP BY substr(fecha, 1, 7)
+      ORDER BY mes DESC
+      LIMIT 12
+    `).all(vendedor).reverse();
+
+    // Available months for filter
+    const mesesDisponibles = db.prepare(`
+      SELECT DISTINCT substr(fecha, 1, 7) as mes
+      FROM reservas_tours
+      WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = ? AND fecha IS NOT NULL AND fecha != ''
+      ORDER BY mes DESC
+    `).all(vendedor).map(r => r.mes);
+
+    success(res, {
+      kpis: {
+        total_tours: kpis.total_tours,
+        total_pagado: totalPagado,
+        itbm,
+        total_comision: Math.round(kpis.total_comision * 100) / 100,
+        por_aprobar: kpis.por_aprobar || 0,
+        aprobados: kpis.aprobados || 0,
+        reservados: kpis.reservados || 0,
+        rechazados: kpis.rechazados || 0,
+        monto_por_aprobar: Math.round((kpis.monto_por_aprobar || 0) * 100) / 100,
+        monto_aprobados: Math.round((kpis.monto_aprobados || 0) * 100) / 100,
+        monto_reservados: Math.round((kpis.monto_reservados || 0) * 100) / 100,
+        monto_rechazados: Math.round((kpis.monto_rechazados || 0) * 100) / 100,
+      },
+      topTours,
+      ingresosPorMes,
+      clientesRecientes: uniqueClientes,
+      mesActual: currentMonth,
+      mesSeleccionado: filterMonth,
+      mesesDisponibles
+    });
+  } catch (err) {
+    console.error('Error loading partner dashboard:', err);
+    error(res, 'SERVER_ERROR', 'Error loading partner dashboard', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// PARTNER TOUR UPDATE (resets status)
+// ══════════════════════════════════════
+
+app.put('/api/v1/partner/tours/:id', requireAuth, (req, res) => {
+  try {
+    if (!isPartner(req)) {
+      return error(res, 'FORBIDDEN', 'Solo disponible para partners', 403);
+    }
+
+    const db = getDb();
+    const tour = findById('reservas_tours', req.params.id);
+    if (!tour) return error(res, 'NOT_FOUND', 'Tour no encontrado', 404);
+
+    // Partner can only edit their own tours
+    if (tour.vendedor !== req.user.vendedor) {
+      return error(res, 'FORBIDDEN', 'No puedes editar tours de otro vendedor', 403);
+    }
+
+    const data = {};
+    const allowed = ['cliente', 'whatsapp', 'email_cliente', 'hotel', 'nacionalidad',
+      'idioma', 'edades', 'notas', 'solicitado_por', 'pax', 'comprobante_url'];
+
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
+      }
+    }
+
+    // Reset status to Por Aprobar
+    data.estatus = 'Por Aprobar';
+
+    const updated = update('reservas_tours', tour.id, data);
+
+    // Create alert for the edit
+    db.prepare(`INSERT INTO alertas (tipo, mensaje, referencia_tipo, referencia_id, datos_extra)
+      VALUES (?, ?, ?, ?, ?)`).run(
+      'tour_editado',
+      `Tour #${tour.id} editado por ${req.user.vendedor}: ${tour.actividad} para ${updated.cliente}. Estado reiniciado a Por Aprobar.`,
+      'tour',
+      tour.id,
+      JSON.stringify({ vendedor: req.user.vendedor, actividad: tour.actividad, cliente: updated.cliente, editado_por: req.user.nombre })
+    );
+
+    success(res, updated);
+  } catch (err) {
+    console.error('Error updating partner tour:', err);
+    error(res, 'SERVER_ERROR', 'Error al actualizar tour', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// TOUR APPROVAL / REJECTION
+// ══════════════════════════════════════
+
+app.post('/api/v1/tours/:id/aprobar', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const tour = findById('reservas_tours', req.params.id);
+    if (!tour) return error(res, 'NOT_FOUND', 'Tour no encontrado', 404);
+    if (tour.estatus !== 'Por Aprobar') {
+      return error(res, 'INVALID_STATUS', `Tour tiene estatus "${tour.estatus}", solo se pueden aprobar tours "Por Aprobar"`, 400);
+    }
+
+    const updated = update('reservas_tours', tour.id, { estatus: 'Aprobado' });
+
+    // Create alert
+    db.prepare(`INSERT INTO alertas (tipo, mensaje, referencia_tipo, referencia_id, datos_extra)
+      VALUES (?, ?, ?, ?, ?)`).run(
+      'tour_aprobado',
+      `Tour #${tour.id} aprobado: ${tour.actividad} para ${tour.cliente} (${tour.vendedor})`,
+      'tour',
+      tour.id,
+      JSON.stringify({ vendedor: tour.vendedor, actividad: tour.actividad, cliente: tour.cliente, aprobado_por: req.user.nombre })
+    );
+
+    success(res, updated);
+  } catch (err) {
+    console.error('Error approving tour:', err);
+    error(res, 'SERVER_ERROR', 'Error al aprobar tour', 500);
+  }
+});
+
+app.post('/api/v1/tours/:id/rechazar', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const tour = findById('reservas_tours', req.params.id);
+    if (!tour) return error(res, 'NOT_FOUND', 'Tour no encontrado', 404);
+    if (tour.estatus !== 'Por Aprobar') {
+      return error(res, 'INVALID_STATUS', `Tour tiene estatus "${tour.estatus}", solo se pueden rechazar tours "Por Aprobar"`, 400);
+    }
+
+    const motivo = sanitize(req.body.motivo || 'Sin motivo especificado');
+    const updated = update('reservas_tours', tour.id, {
+      estatus: 'Rechazado',
+      motivo_rechazo: motivo
+    });
+
+    // Create alert
+    db.prepare(`INSERT INTO alertas (tipo, mensaje, referencia_tipo, referencia_id, datos_extra)
+      VALUES (?, ?, ?, ?, ?)`).run(
+      'tour_rechazado',
+      `Tour #${tour.id} rechazado: ${tour.actividad} para ${tour.cliente}. Motivo: ${motivo}`,
+      'tour',
+      tour.id,
+      JSON.stringify({ vendedor: tour.vendedor, actividad: tour.actividad, cliente: tour.cliente, motivo, rechazado_por: req.user.nombre })
+    );
+
+    success(res, updated);
+  } catch (err) {
+    console.error('Error rejecting tour:', err);
+    error(res, 'SERVER_ERROR', 'Error al rechazar tour', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// ALERTAS — AI Agent Monitoring
+// ══════════════════════════════════════
+
+app.get('/api/v1/alertas', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const { tipo, leida, limit: lim } = req.query;
+    let where = '1=1';
+    const params = [];
+
+    if (tipo) { where += ' AND tipo = ?'; params.push(tipo); }
+    if (leida !== undefined) { where += ' AND leida = ?'; params.push(leida === 'true' || leida === '1' ? 1 : 0); }
+
+    const maxResults = Math.min(parseInt(lim) || 50, 100);
+    const data = db.prepare(`SELECT * FROM alertas WHERE ${where} ORDER BY created_at DESC LIMIT ?`).all(...params, maxResults);
+    const unread = db.prepare('SELECT COUNT(*) as c FROM alertas WHERE leida = 0').get().c;
+
+    success(res, { alertas: data, sin_leer: unread });
+  } catch (err) {
+    console.error('Error loading alerts:', err);
+    error(res, 'SERVER_ERROR', 'Error loading alerts', 500);
+  }
+});
+
+app.patch('/api/v1/alertas/:id', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const alerta = db.prepare('SELECT * FROM alertas WHERE id = ?').get(req.params.id);
+    if (!alerta) return error(res, 'NOT_FOUND', 'Alerta no encontrada', 404);
+    db.prepare('UPDATE alertas SET leida = 1 WHERE id = ?').run(req.params.id);
+    success(res, { ...alerta, leida: 1 });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error updating alert', 500);
+  }
+});
+
+app.patch('/api/v1/alertas/leer-todas', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const result = db.prepare('UPDATE alertas SET leida = 1 WHERE leida = 0').run();
+    success(res, { updated: result.changes });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error marking all as read', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// FILE UPLOAD
+// ══════════════════════════════════════
+
+app.post('/api/v1/uploads', requireAuth, upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return error(res, 'VALIDATION_ERROR', 'No se recibió ningún archivo', 400);
+    }
+    const url = `/uploads/${req.file.filename}`;
+    success(res, { url, filename: req.file.filename, size: req.file.size }, null, 201);
+  } catch (err) {
+    console.error('Error uploading file:', err);
+    error(res, 'SERVER_ERROR', 'Error al subir archivo', 500);
   }
 });
 
@@ -532,7 +1041,7 @@ app.get('/api/v1/charts', (req, res) => {
         COALESCE(SUM(ganancia_mahana), 0) as ganancia,
         COUNT(*) as cantidad
       FROM reservas_tours
-      WHERE fecha IS NOT NULL AND fecha != ''
+      WHERE (eliminado IS NULL OR eliminado = 0) AND fecha IS NOT NULL AND fecha != ''
       GROUP BY substr(fecha, 1, 7)
       ORDER BY mes DESC
       LIMIT 12
@@ -542,7 +1051,7 @@ app.get('/api/v1/charts', (req, res) => {
     const mesesDisponibles = db.prepare(`
       SELECT DISTINCT substr(fecha, 1, 7) as mes
       FROM reservas_tours
-      WHERE fecha IS NOT NULL AND fecha != ''
+      WHERE (eliminado IS NULL OR eliminado = 0) AND fecha IS NOT NULL AND fecha != ''
       ORDER BY mes DESC
     `).all().map(r => r.mes);
 
@@ -553,7 +1062,7 @@ app.get('/api/v1/charts', (req, res) => {
         COUNT(*) as cantidad,
         COALESCE(SUM(precio_ingreso), 0) as ingresos
       FROM reservas_tours
-      WHERE actividad IS NOT NULL AND actividad != '' ${dateFilter}
+      WHERE (eliminado IS NULL OR eliminado = 0) AND actividad IS NOT NULL AND actividad != '' ${dateFilter}
       GROUP BY actividad
       ORDER BY cantidad DESC
       LIMIT 8
@@ -561,10 +1070,10 @@ app.get('/api/v1/charts', (req, res) => {
 
     // Period stats (filtered)
     const filteredStats = isAll
-      ? db.prepare('SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours').get()
+      ? db.prepare('SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0)').get()
       : (isYear
-        ? db.prepare(`SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE substr(fecha,1,4) = ?`).get(filterMonth)
-        : db.prepare(`SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE substr(fecha,1,7) = ?`).get(filterMonth)
+        ? db.prepare(`SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND substr(fecha,1,4) = ?`).get(filterMonth)
+        : db.prepare(`SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND substr(fecha,1,7) = ?`).get(filterMonth)
       );
 
     // Tours by period for the tours page
@@ -573,14 +1082,14 @@ app.get('/api/v1/charts', (req, res) => {
     inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay());
     const inicioMes = hoy.substring(0, 7) + '-01';
     const inicioAnio = hoy.substring(0, 4) + '-01-01';
-    const getPeriodStats = (desde) => db.prepare('SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE fecha >= ?').get(desde);
+    const getPeriodStats = (desde) => db.prepare('SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0) AND fecha >= ?').get(desde);
 
     const periodos = {
       hoy: getPeriodStats(hoy),
       semana: getPeriodStats(inicioSemana.toISOString().split('T')[0]),
       mes: getPeriodStats(inicioMes),
       anio: getPeriodStats(inicioAnio),
-      todo: db.prepare('SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours').get()
+      todo: db.prepare('SELECT COUNT(*) as cantidad, COALESCE(SUM(precio_ingreso),0) as ingresos, COALESCE(SUM(ganancia_mahana),0) as ganancia FROM reservas_tours WHERE (eliminado IS NULL OR eliminado = 0)').get()
     };
 
     // Estadias by status
@@ -915,6 +1424,232 @@ app.get('/api/v1/calendar', (req, res) => {
 });
 
 // (Legacy endpoints removed — use /api/v1/* exclusively)
+
+// ══════════════════════════════════════
+// AVAILABILITY ENDPOINTS
+// ══════════════════════════════════════
+
+// Get slots for a specific date
+app.get('/api/v1/disponibilidad', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const { fecha } = req.query;
+    if (!fecha) return error(res, 'VALIDATION_ERROR', 'fecha is required', 400);
+
+    let slots;
+    if (isPartner(req)) {
+      // Partners only see available (unblocked, not full) slots
+      slots = db.prepare(`
+        SELECT s.*, a.nombre as actividad_nombre
+        FROM horarios_slots s
+        JOIN actividades a ON a.id = s.actividad_id
+        WHERE s.fecha = ? AND s.bloqueado = 0
+        ORDER BY a.nombre, s.hora
+      `).all(fecha);
+    } else {
+      slots = db.prepare(`
+        SELECT s.*, a.nombre as actividad_nombre
+        FROM horarios_slots s
+        JOIN actividades a ON a.id = s.actividad_id
+        WHERE s.fecha = ?
+        ORDER BY a.nombre, s.hora
+      `).all(fecha);
+    }
+
+    success(res, slots);
+  } catch (err) {
+    console.error('Error fetching disponibilidad:', err);
+    error(res, 'SERVER_ERROR', 'Error fetching disponibilidad', 500);
+  }
+});
+
+// Get slots for a week
+app.get('/api/v1/disponibilidad/semana', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const { desde } = req.query;
+    if (!desde) return error(res, 'VALIDATION_ERROR', 'desde (start date) is required', 400);
+
+    // Calculate end of week (7 days from start)
+    const start = new Date(desde + 'T00:00:00');
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const hasta = end.toISOString().split('T')[0];
+
+    let slots;
+    if (isPartner(req)) {
+      slots = db.prepare(`
+        SELECT s.*, a.nombre as actividad_nombre
+        FROM horarios_slots s
+        JOIN actividades a ON a.id = s.actividad_id
+        WHERE s.fecha >= ? AND s.fecha <= ? AND s.bloqueado = 0
+        ORDER BY s.fecha, a.nombre, s.hora
+      `).all(desde, hasta);
+    } else {
+      slots = db.prepare(`
+        SELECT s.*, a.nombre as actividad_nombre
+        FROM horarios_slots s
+        JOIN actividades a ON a.id = s.actividad_id
+        WHERE s.fecha >= ? AND s.fecha <= ?
+        ORDER BY s.fecha, a.nombre, s.hora
+      `).all(desde, hasta);
+    }
+
+    success(res, slots);
+  } catch (err) {
+    console.error('Error fetching week slots:', err);
+    error(res, 'SERVER_ERROR', 'Error fetching disponibilidad', 500);
+  }
+});
+
+// Create a slot
+app.post('/api/v1/slots', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const { actividad_id, fecha, hora, capacidad = 6 } = req.body;
+    if (!actividad_id || !fecha || !hora) {
+      return error(res, 'VALIDATION_ERROR', 'actividad_id, fecha, hora son requeridos', 400);
+    }
+    const slot = create('horarios_slots', {
+      actividad_id: parseInt(actividad_id),
+      fecha,
+      hora,
+      capacidad: parseInt(capacidad) || 6,
+      reservados: 0,
+      bloqueado: 0,
+    });
+    success(res, slot, null, 201);
+  } catch (err) {
+    if (err.message?.includes('UNIQUE')) {
+      return error(res, 'DUPLICATE', 'Ya existe un slot para esta actividad/fecha/hora', 409);
+    }
+    console.error('Error creating slot:', err);
+    error(res, 'SERVER_ERROR', 'Error creating slot', 500);
+  }
+});
+
+// Update a slot (capacity, block, notes)
+app.put('/api/v1/slots/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const existing = findById('horarios_slots', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', 'Slot not found', 404);
+
+    const data = {};
+    const allowed = ['capacidad', 'bloqueado', 'notas'];
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) {
+        data[field] = req.body[field];
+      }
+    }
+
+    const updated = update('horarios_slots', req.params.id, data);
+    success(res, updated);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error updating slot', 500);
+  }
+});
+
+// Delete a slot
+app.delete('/api/v1/slots/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const removed = remove('horarios_slots', req.params.id);
+    if (!removed) return error(res, 'NOT_FOUND', 'Slot not found', 404);
+    success(res, { deleted: true, id: req.params.id });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error deleting slot', 500);
+  }
+});
+
+// Get plantillas
+app.get('/api/v1/plantillas', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const plantillas = db.prepare(`
+      SELECT p.*, a.nombre as actividad_nombre
+      FROM plantillas_horario p
+      JOIN actividades a ON a.id = p.actividad_id
+      WHERE p.activa = 1
+      ORDER BY p.actividad_id, p.dia_semana, p.hora
+    `).all();
+    success(res, plantillas);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error listing plantillas', 500);
+  }
+});
+
+// Create plantilla
+app.post('/api/v1/plantillas', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const { actividad_id, dia_semana, hora, capacidad = 6 } = req.body;
+    if (actividad_id === undefined || dia_semana === undefined || !hora) {
+      return error(res, 'VALIDATION_ERROR', 'actividad_id, dia_semana, hora son requeridos', 400);
+    }
+    const plantilla = create('plantillas_horario', {
+      actividad_id: parseInt(actividad_id),
+      dia_semana: parseInt(dia_semana),
+      hora,
+      capacidad: parseInt(capacidad) || 6,
+      activa: 1,
+    });
+    success(res, plantilla, null, 201);
+  } catch (err) {
+    console.error('Error creating plantilla:', err);
+    error(res, 'SERVER_ERROR', 'Error creating plantilla', 500);
+  }
+});
+
+// Generate slots for a month from plantillas
+app.post('/api/v1/plantillas/generar', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const { mes, actividad_id } = req.body; // mes = "2026-03"
+    if (!mes) return error(res, 'VALIDATION_ERROR', 'mes is required (e.g. "2026-03")', 400);
+
+    const db = getDb();
+    const [year, month] = mes.split('-').map(Number);
+
+    // Get active plantillas
+    let plantillas;
+    if (actividad_id) {
+      plantillas = db.prepare('SELECT * FROM plantillas_horario WHERE activa = 1 AND actividad_id = ?').all(actividad_id);
+    } else {
+      plantillas = db.prepare('SELECT * FROM plantillas_horario WHERE activa = 1').all();
+    }
+
+    if (plantillas.length === 0) {
+      return error(res, 'NO_TEMPLATES', 'No hay plantillas activas para generar', 400);
+    }
+
+    // Generate all dates in the month
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let created = 0;
+
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO horarios_slots (actividad_id, fecha, hora, capacidad, reservados, bloqueado)
+      VALUES (?, ?, ?, ?, 0, 0)
+    `);
+
+    const transaction = db.transaction(() => {
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month - 1, day);
+        const dayOfWeek = date.getDay(); // 0=Sun ... 6=Sat
+        const dateStr = date.toISOString().split('T')[0];
+
+        for (const p of plantillas) {
+          if (p.dia_semana === dayOfWeek) {
+            const result = insertStmt.run(p.actividad_id, dateStr, p.hora, p.capacidad);
+            if (result.changes > 0) created++;
+          }
+        }
+      }
+    });
+
+    transaction();
+
+    success(res, { created, mes, plantillas: plantillas.length }, null, 201);
+  } catch (err) {
+    console.error('Error generating slots:', err);
+    error(res, 'SERVER_ERROR', 'Error generating slots', 500);
+  }
+});
 
 // ══════════════════════════════════════
 // STATIC FILES + SPA FALLBACK

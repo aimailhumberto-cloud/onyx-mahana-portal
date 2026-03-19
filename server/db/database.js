@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
+const { hashPassword } = require('../auth');
 
 const DB_PATH = path.join(__dirname, '../../data/mahana.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
@@ -24,6 +25,36 @@ function getDb() {
     addCol('reservas_estadias', 'base_caracol', 'REAL');
     addCol('reservas_estadias', 'impuesto', 'REAL');
     addCol('reservas_estadias', 'cleaning_fee', 'REAL');
+
+    // Partner tour request extra fields
+    addCol('reservas_tours', 'comprobante_url', 'TEXT');
+    addCol('reservas_tours', 'email_cliente', 'TEXT');
+    addCol('reservas_tours', 'hotel', 'TEXT');
+    addCol('reservas_tours', 'nacionalidad', 'TEXT');
+    addCol('reservas_tours', 'idioma', 'TEXT');
+    addCol('reservas_tours', 'edades', 'TEXT');
+    addCol('reservas_tours', 'motivo_rechazo', 'TEXT');
+    addCol('reservas_tours', 'solicitado_por', 'TEXT');
+    addCol('reservas_tours', 'pax', 'INTEGER');
+
+    // Soft delete support
+    addCol('reservas_tours', 'eliminado', 'INTEGER DEFAULT 0');
+    addCol('reservas_tours', 'eliminado_por', 'TEXT');
+    addCol('reservas_tours', 'eliminado_at', 'TEXT');
+
+    // Alertas table for AI agent monitoring
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS alertas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tipo TEXT NOT NULL,
+        mensaje TEXT NOT NULL,
+        referencia_tipo TEXT,
+        referencia_id INTEGER,
+        datos_extra TEXT,
+        leida INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
 
     // Rename Cancelada → Perdida in existing data
     db.prepare(`UPDATE reservas_estadias SET estado = 'Perdida' WHERE estado = 'Cancelada'`).run();
@@ -53,7 +84,7 @@ function getDb() {
 
     // Assign categories to existing activities (safe to run multiple times)
     const setCat = (nombre, categoria) => {
-      db.prepare('UPDATE actividades SET categoria = ? WHERE nombre = ? AND (categoria IS NULL OR categoria = "")').run(categoria, nombre);
+      db.prepare("UPDATE actividades SET categoria = ? WHERE nombre = ? AND (categoria IS NULL OR categoria = '')").run(categoria, nombre);
     };
     setCat('Academia de Surf', 'Acuática');
     setCat('Mulita', 'Acuática');
@@ -97,6 +128,15 @@ function getDb() {
       console.log('✅ Seeded 3 propiedades');
     }
 
+    // Seed usuarios if empty
+    const userCount = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
+    if (userCount.c === 0) {
+      const insertUser = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)');
+      insertUser.run('admin@mahana.com', hashPassword('mahana2026'), 'Mahana Admin', 'admin', null);
+      insertUser.run('caracol@playacaracol.com', hashPassword('caracol2026'), 'Playa Caracol', 'partner', 'Playa Caracol');
+      console.log('✅ Seeded 2 users (admin + partner)');
+    }
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;
@@ -104,7 +144,7 @@ function getDb() {
 
 // ── Table whitelist (prevents SQL injection via table names) ──
 
-const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff'];
+const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas'];
 
 function validateTable(table) {
   if (!VALID_TABLES.includes(table)) {

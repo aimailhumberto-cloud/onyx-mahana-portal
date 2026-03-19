@@ -110,6 +110,11 @@ export default function Dashboard() {
           <div className="hidden sm:flex items-center gap-2">
             <img src="/ans-logo.jpg" alt="ANS" className="h-7 rounded-md bg-white px-1.5 py-0.5" />
             <img src="/caracol-logo.png" alt="Caracol" className="h-7 rounded-md bg-white px-1.5 py-0.5" />
+            {data.tours_por_estatus?.por_aprobar > 0 && (
+              <span className="bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
+                {data.tours_por_estatus.por_aprobar} Por Aprobar
+              </span>
+            )}
           </div>
           <div className="relative">
             <button onClick={() => setShowMonthPicker(!showMonthPicker)}

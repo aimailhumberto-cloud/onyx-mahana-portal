@@ -72,6 +72,49 @@ CREATE INDEX IF NOT EXISTS idx_tours_fecha ON reservas_tours(fecha);
 CREATE INDEX IF NOT EXISTS idx_tours_estatus ON reservas_tours(estatus);
 CREATE INDEX IF NOT EXISTS idx_tours_actividad ON reservas_tours(actividad);
 CREATE INDEX IF NOT EXISTS idx_tours_responsable ON reservas_tours(responsable);
+CREATE INDEX IF NOT EXISTS idx_tours_vendedor ON reservas_tours(vendedor);
 CREATE INDEX IF NOT EXISTS idx_estadias_estado ON reservas_estadias(estado);
 CREATE INDEX IF NOT EXISTS idx_estadias_propiedad ON reservas_estadias(propiedad);
 CREATE INDEX IF NOT EXISTS idx_estadias_checkin ON reservas_estadias(check_in);
+
+-- Usuarios (autenticación y roles)
+CREATE TABLE IF NOT EXISTS usuarios (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  nombre TEXT NOT NULL,
+  rol TEXT DEFAULT 'partner',
+  vendedor TEXT,
+  activo INTEGER DEFAULT 1,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Slots de disponibilidad por actividad/día/hora
+CREATE TABLE IF NOT EXISTS horarios_slots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actividad_id INTEGER NOT NULL,
+  fecha TEXT NOT NULL,
+  hora TEXT NOT NULL,
+  capacidad INTEGER DEFAULT 6,
+  reservados INTEGER DEFAULT 0,
+  bloqueado INTEGER DEFAULT 0,
+  notas TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (actividad_id) REFERENCES actividades(id),
+  UNIQUE(actividad_id, fecha, hora)
+);
+
+-- Plantillas semanales para generación en bulk
+CREATE TABLE IF NOT EXISTS plantillas_horario (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actividad_id INTEGER NOT NULL,
+  dia_semana INTEGER NOT NULL,
+  hora TEXT NOT NULL,
+  capacidad INTEGER DEFAULT 6,
+  activa INTEGER DEFAULT 1,
+  FOREIGN KEY (actividad_id) REFERENCES actividades(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_slots_fecha ON horarios_slots(fecha);
+CREATE INDEX IF NOT EXISTS idx_slots_actividad ON horarios_slots(actividad_id);
+CREATE INDEX IF NOT EXISTS idx_usuarios_email ON usuarios(email);

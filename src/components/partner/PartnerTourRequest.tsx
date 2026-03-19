@@ -1,0 +1,575 @@
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getActividades, getDisponibilidad, createTour, uploadFile } from '../../api/api'
+import type { Actividad, Slot } from '../../api/api'
+import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle } from 'lucide-react'
+import { useAuth } from '../../contexts/AuthContext'
+
+export default function PartnerTourRequest() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const [step, setStep] = useState(1) // 1=activity, 2=date+slot, 3=details, 4=confirm
+  const [actividades, setActividades] = useState<Actividad[]>([])
+  const [slots, setSlots] = useState<Slot[]>([])
+  const [loadingActs, setLoadingActs] = useState(true)
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  const [selectedAct, setSelectedAct] = useState<Actividad | null>(null)
+  const [selectedDate, setSelectedDate] = useState('')
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
+
+  const [form, setForm] = useState({
+    cliente: '',
+    whatsapp: '',
+    email: '',
+    hotel: '',
+    nacionalidad: '',
+    idioma: '',
+    edades: '',
+    pax: '1',
+    notas: '',
+    vendedor_nombre: user?.nombre || '',
+    habitacion: '',
+  })
+
+  // Comprobante upload
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null)
+  const [comprobantePreview, setComprobantePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    getActividades().then(res => {
+      if (res.success) {
+        setActividades(res.data.filter(a => a.activa))
+      }
+      setLoadingActs(false)
+    })
+  }, [])
+
+  // Load slots when date changes
+  useEffect(() => {
+    if (selectedDate && selectedAct) {
+      setLoadingSlots(true)
+      setSelectedSlot(null)
+      getDisponibilidad({ fecha: selectedDate }).then(res => {
+        if (res.success) {
+          const filtered = res.data.filter(s => s.actividad_id === selectedAct.id && !s.bloqueado && s.reservados < s.capacidad)
+          setSlots(filtered)
+        }
+        setLoadingSlots(false)
+      })
+    }
+  }, [selectedDate, selectedAct])
+
+  const handleSelectActivity = (act: Actividad) => {
+    setSelectedAct(act)
+    setStep(2)
+  }
+
+  const handleSelectSlot = (slot: Slot) => {
+    setSelectedSlot(slot)
+    setStep(3)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setComprobanteFile(file)
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        setComprobantePreview(ev.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeComprobante = () => {
+    setComprobanteFile(null)
+    setComprobantePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleSubmit = async () => {
+    // Validate all required fields
+    const requiredFields = ['cliente', 'whatsapp', 'email', 'hotel', 'habitacion', 'nacionalidad', 'idioma', 'edades', 'notas', 'vendedor_nombre']
+    const missingFields = requiredFields.filter(f => !form[f as keyof typeof form]?.trim())
+    if (missingFields.length > 0 || !selectedAct || !comprobanteFile) {
+      setResult({ type: 'error', message: 'Todos los campos son obligatorios, incluyendo notas y comprobante de pago' })
+      return
+    }
+    if (!selectedDate) {
+      setResult({ type: 'error', message: 'Debes seleccionar una fecha' })
+      return
+    }
+    setSaving(true)
+    setResult(null)
+
+    try {
+      // First upload the comprobante
+      setUploading(true)
+      const uploadRes = await uploadFile(comprobanteFile)
+      setUploading(false)
+
+      if (!uploadRes.success) {
+        setResult({ type: 'error', message: uploadRes.error?.message || 'Error al subir comprobante' })
+        setSaving(false)
+        return
+      }
+
+      const data: any = {
+        cliente: form.cliente,
+        whatsapp: form.whatsapp,
+        actividad: selectedAct.nombre,
+        fecha: selectedSlot?.fecha || selectedDate,
+        hora: selectedSlot?.hora || '',
+        notas: form.notas,
+        pax: parseInt(form.pax) || 1,
+        comprobante_url: uploadRes.data.url,
+        email_cliente: form.email,
+        hotel: `${form.hotel} - Hab/Apto: ${form.habitacion}`,
+        nacionalidad: form.nacionalidad,
+        idioma: form.idioma,
+        edades: form.edades,
+        solicitado_por: form.vendedor_nombre,
+        gestionado_por: user?.nombre || 'Partner',
+      }
+
+      if (selectedSlot) {
+        data.slot_id = selectedSlot.id
+      }
+
+      const res = await createTour(data)
+      if (res.success) {
+        setResult({ type: 'success', message: `¡Tour solicitado! ID: ${res.data?.id}. Mahana lo confirmará pronto.` })
+        setStep(4)
+      } else {
+        setResult({ type: 'error', message: res.error?.message || 'Error al solicitar tour' })
+      }
+    } catch {
+      setResult({ type: 'error', message: 'Error de conexión' })
+    }
+    setSaving(false)
+  }
+
+  const onChange = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }))
+
+  const today = new Date().toISOString().split('T')[0]
+
+  // Group activities by category
+  const groupedActivities = actividades.reduce((acc, act) => {
+    const cat = act.categoria || 'Otros'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(act)
+    return acc
+  }, {} as Record<string, Actividad[]>)
+
+  if (loadingActs) {
+    return <div className="flex items-center justify-center h-60"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button onClick={() => step > 1 && !result ? setStep(step - 1) : navigate('/')} className="p-2 rounded-lg hover:bg-gray-100">
+          <ArrowLeft className="w-5 h-5 text-gray-600" />
+        </button>
+        <div>
+          <h1 className="text-2xl font-bold text-blue-900">Solicitar Tour</h1>
+          <p className="text-sm text-gray-500">
+            {step === 1 && 'Paso 1: Elige una actividad'}
+            {step === 2 && 'Paso 2: Selecciona fecha y horario'}
+            {step === 3 && 'Paso 3: Datos del cliente y pago'}
+            {step === 4 && '¡Solicitud enviada!'}
+          </p>
+        </div>
+      </div>
+
+      {/* Steps indicator */}
+      <div className="flex items-center gap-2">
+        {[1, 2, 3].map(s => (
+          <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${s <= step ? 'bg-blue-600' : 'bg-gray-200'}`} />
+        ))}
+      </div>
+
+      {/* Result */}
+      {result && (
+        <div className={`flex items-center gap-3 px-4 py-4 rounded-xl ${result.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+          {result.type === 'success' ? <CheckCircle className="w-6 h-6 flex-shrink-0" /> : <AlertCircle className="w-6 h-6 flex-shrink-0" />}
+          <div>
+            <p className="font-medium">{result.message}</p>
+            {result.type === 'success' && (
+              <button onClick={() => navigate('/reservas')} className="text-sm underline mt-1 hover:opacity-80">Ver mis reservas →</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Step 1: Select Activity — Grouped by Category */}
+      {step === 1 && (
+        <div className="space-y-6">
+          {Object.entries(groupedActivities).map(([category, acts]) => (
+            <div key={category}>
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                {category}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {acts.map(act => (
+                  <button
+                    key={act.id}
+                    onClick={() => handleSelectActivity(act)}
+                    className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-blue-300 hover:shadow-md transition-all text-left group"
+                  >
+                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">{act.nombre}</h3>
+                    {act.precio_base != null && act.precio_base > 0 && (
+                      <span className="text-sm text-emerald-600 font-medium">${act.precio_base}</span>
+                    )}
+                    <div className="mt-2 space-y-1 text-sm text-gray-500">
+                      {act.duracion && <p className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {act.duracion}</p>}
+                      {act.punto_encuentro && <p className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {act.punto_encuentro}</p>}
+                      {act.capacidad_max && <p className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Max {act.capacidad_max} personas</p>}
+                    </div>
+                    {act.descripcion && <p className="text-xs text-gray-400 mt-2 line-clamp-2">{act.descripcion}</p>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Step 2: Select Date + Slot */}
+      {step === 2 && selectedAct && (
+        <div className="bg-white rounded-xl shadow-sm p-6 space-y-5">
+          <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold">
+              {selectedAct.nombre.charAt(0)}
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">{selectedAct.nombre}</h3>
+              <p className="text-sm text-gray-500">{selectedAct.duracion}</p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Selecciona una fecha</label>
+            <input
+              type="date"
+              min={today}
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {selectedDate && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Horarios disponibles</label>
+              {loadingSlots ? (
+                <div className="flex items-center justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+              ) : slots.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {slots.map(slot => (
+                    <button
+                      key={slot.id}
+                      onClick={() => handleSelectSlot(slot)}
+                      className="p-3 border rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all text-center group"
+                    >
+                      <p className="font-semibold text-gray-900 group-hover:text-blue-700">{slot.hora}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {slot.capacidad - slot.reservados} de {slot.capacidad} cupos
+                      </p>
+                      <div className="w-full bg-gray-200 rounded-full h-1 mt-1.5">
+                        <div
+                          className="bg-blue-500 rounded-full h-1 transition-all"
+                          style={{ width: `${(slot.reservados / slot.capacidad) * 100}%` }}
+                        />
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-400">
+                  <p>No hay horarios disponibles para esta fecha</p>
+                  <p className="text-sm mt-1">Puedes continuar sin horario específico</p>
+                  <button
+                    onClick={() => setStep(3)}
+                    className="mt-3 text-blue-600 font-medium text-sm hover:underline"
+                  >
+                    Continuar sin horario →
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 3: Client Details + Comprobante */}
+      {step === 3 && (
+        <div className="bg-white rounded-xl shadow-sm p-6 space-y-5">
+          {/* Summary */}
+          <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+            <p className="font-semibold text-blue-900">{selectedAct?.nombre}</p>
+            <p className="text-sm text-blue-700">
+              {selectedSlot ? `${selectedSlot.fecha} a las ${selectedSlot.hora}` : selectedDate || 'Sin fecha definida'}
+              {selectedSlot && ` · ${selectedSlot.capacidad - selectedSlot.reservados} cupos disponibles`}
+            </p>
+          </div>
+
+          {/* Solicitado por (Partner info - editable) */}
+          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+            <div className="flex items-center gap-3 mb-3">
+              <UserCircle className="w-8 h-8 text-blue-600 flex-shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wider font-medium">Información del solicitante</p>
+                <p className="text-sm text-gray-500">{user?.email} · {user?.vendedor}</p>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor (persona que vendió el tour) *</label>
+              <input
+                required
+                value={form.vendedor_nombre}
+                onChange={e => onChange('vendedor_nombre', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.vendedor_nombre.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="Nombre del vendedor"
+              />
+            </div>
+          </div>
+
+          {/* Basic info */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre del cliente *</label>
+              <input
+                required
+                value={form.cliente}
+                onChange={e => onChange('cliente', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.cliente.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="Nombre completo"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp *</label>
+              <input
+                required
+                value={form.whatsapp}
+                onChange={e => onChange('whatsapp', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.whatsapp.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="+507..."
+              />
+            </div>
+          </div>
+
+          {/* Extra client fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <input
+                type="email"
+                required
+                value={form.email}
+                onChange={e => onChange('email', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.email.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="cliente@email.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hotel / Alojamiento *</label>
+              <input
+                required
+                value={form.hotel}
+                onChange={e => onChange('hotel', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.hotel.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="Ej: PH Playa Caracol"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Habitación / Apto *</label>
+              <input
+                required
+                value={form.habitacion}
+                onChange={e => onChange('habitacion', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.habitacion.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="Ej: Torre 2 Apto 3B"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nacionalidad *</label>
+              <input
+                required
+                value={form.nacionalidad}
+                onChange={e => onChange('nacionalidad', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.nacionalidad.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+                placeholder="Ej: Panamá"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Idioma *</label>
+              <select
+                required
+                value={form.idioma}
+                onChange={e => onChange('idioma', e.target.value)}
+                className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.idioma ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+              >
+                <option value="">Seleccionar *</option>
+                <option value="Español">Español</option>
+                <option value="English">English</option>
+                <option value="Français">Français</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1"># Personas *</label>
+              <input
+                type="number"
+                required
+                min="1"
+                max={selectedSlot ? (selectedSlot.capacidad - selectedSlot.reservados) : 20}
+                value={form.pax}
+                onChange={e => onChange('pax', e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Edades de los participantes *</label>
+            <input
+              required
+              value={form.edades}
+              onChange={e => onChange('edades', e.target.value)}
+              className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${!form.edades.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+              placeholder="Ej: 25, 30, 8, 5"
+            />
+          </div>
+
+          {!selectedDate && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha deseada</label>
+              <input
+                type="date"
+                min={today}
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Notas *</label>
+            <textarea
+              rows={3}
+              required
+              value={form.notas}
+              onChange={e => onChange('notas', e.target.value)}
+              className={`w-full px-3 py-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${!form.notas.trim() ? 'border-red-300 bg-red-50' : 'border-gray-200'}`}
+              placeholder="Lugar de salida, punto de recogida, detalles importantes, alergias, restricciones..."
+            />
+            <p className="text-xs text-gray-400 mt-1">⚠️ Incluir siempre: lugar de salida y detalles del tour</p>
+          </div>
+
+          {/* Comprobante de pago — OBLIGATORIO */}
+          <div className="border-t border-gray-100 pt-5">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Comprobante de pago *
+              <span className="text-gray-400 font-normal ml-1">(obligatorio)</span>
+            </label>
+            
+            {!comprobantePreview ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
+              >
+                <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3 group-hover:text-blue-400 transition-colors" />
+                <p className="text-sm font-medium text-gray-600 group-hover:text-blue-600">
+                  Haz clic para subir foto del comprobante
+                </p>
+                <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF — Máx 10MB</p>
+              </div>
+            ) : (
+              <div className="relative border border-gray-200 rounded-xl overflow-hidden">
+                <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-64 object-contain bg-gray-50" />
+                <button
+                  onClick={removeComprobante}
+                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+                <div className="px-4 py-2 bg-green-50 border-t border-green-100 flex items-center gap-2">
+                  <Image className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-green-700 font-medium">{comprobanteFile?.name}</span>
+                  <span className="text-xs text-green-500 ml-auto">{comprobanteFile ? `${(comprobanteFile.size / 1024).toFixed(0)} KB` : ''}</span>
+                </div>
+              </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {!comprobanteFile && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" /> Debes subir un comprobante de pago para continuar
+              </p>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="px-4 py-2.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+            >
+              Atrás
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={saving || !form.cliente.trim() || !form.whatsapp.trim() || !form.email.trim() || !form.hotel.trim() || !form.habitacion.trim() || !form.nacionalidad.trim() || !form.idioma || !form.edades.trim() || !form.notas.trim() || !form.vendedor_nombre.trim() || !comprobanteFile}
+              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-md shadow-blue-600/30"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {uploading ? 'Subiendo comprobante...' : 'Solicitar Tour'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Success */}
+      {step === 4 && result?.type === 'success' && (
+        <div className="text-center py-8">
+          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">¡Solicitud Enviada!</h2>
+          <p className="text-gray-500 mb-6">Mahana Tours confirmará tu reserva pronto</p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={() => navigate('/reservas')}
+              className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-md"
+            >
+              Ver Mis Reservas
+            </button>
+            <button
+              onClick={() => { setStep(1); setSelectedAct(null); setSelectedSlot(null); setSelectedDate(''); setResult(null); setComprobanteFile(null); setComprobantePreview(null); setForm({ cliente: '', whatsapp: '', email: '', hotel: '', habitacion: '', nacionalidad: '', idioma: '', edades: '', pax: '1', notas: '', vendedor_nombre: user?.nombre || '' }) }}
+              className="px-5 py-2.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50"
+            >
+              Solicitar Otro
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

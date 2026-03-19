@@ -1,4 +1,5 @@
 import { Outlet, NavLink } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
 import { 
   Home, 
   Calendar, 
@@ -7,7 +8,9 @@ import {
   Package,
   Settings, 
   Menu,
-  X
+  X,
+  LogOut,
+  Clock
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -17,11 +20,13 @@ const navigation = [
   { name: 'Estadías', href: '/estadias', icon: Building2 },
   { name: 'Calendario', href: '/calendario', icon: CalendarDays },
   { name: 'Productos', href: '/productos', icon: Package },
+  { name: 'Disponibilidad', href: '/disponibilidad', icon: Clock },
   { name: 'Admin', href: '/admin', icon: Settings },
 ]
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { user, logout } = useAuth()
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -73,16 +78,23 @@ export default function Layout() {
           ))}
         </nav>
 
-        {/* Version */}
+        {/* User + Logout */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-turquoise-500 to-turquoise-700 flex items-center justify-center">
-              <span className="font-bold text-sm">MT</span>
+              <span className="font-bold text-sm">{user?.nombre?.charAt(0) || 'M'}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate text-sm">Mahana Tours</p>
-              <p className="text-xs text-gray-400">Portal v2.0</p>
+              <p className="font-medium truncate text-sm">{user?.nombre || 'Mahana Tours'}</p>
+              <p className="text-xs text-gray-400">{user?.rol === 'admin' ? 'Administrador' : 'Partner'}</p>
             </div>
+            <button 
+              onClick={logout}
+              className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
@@ -101,7 +113,7 @@ export default function Layout() {
           <h1 className="text-lg font-semibold text-azul-900">Portal de Reservas</h1>
           
           <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">API-first</span>
+            <span className="hidden sm:inline text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">Admin</span>
           </div>
         </header>
 

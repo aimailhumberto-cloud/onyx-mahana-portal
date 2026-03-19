@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
 import ToursList from './components/ToursList'
@@ -8,26 +9,83 @@ import EstadiaForm from './components/EstadiaForm'
 import CalendarView from './components/CalendarView'
 import Productos from './components/Productos'
 import AdminPanel from './components/AdminPanel'
+import LoginPage from './components/LoginPage'
+import PartnerLayout from './components/partner/PartnerLayout'
+import PartnerDashboard from './components/partner/PartnerDashboard'
+import PartnerTourRequest from './components/partner/PartnerTourRequest'
+import PartnerReservations from './components/partner/PartnerReservations'
+import DisponibilidadAdmin from './components/DisponibilidadAdmin'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { Loader2 } from 'lucide-react'
+
+function AppRoutes() {
+  const { user, loading, isAdmin, isPartner } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 animate-spin text-turquoise-600 mx-auto mb-3" />
+          <p className="text-gray-500 text-sm">Cargando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Not authenticated → show login
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    )
+  }
+
+  // Partner routes
+  if (isPartner) {
+    return (
+      <Routes>
+        <Route path="/" element={<PartnerLayout />}>
+          <Route index element={<PartnerDashboard />} />
+          <Route path="solicitar" element={<PartnerTourRequest />} />
+          <Route path="reservas" element={<PartnerReservations />} />
+        </Route>
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    )
+  }
+
+  // Admin routes
+  return (
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="tours" element={<ToursList />} />
+        <Route path="tours/nuevo" element={<TourForm />} />
+        <Route path="tours/:id/editar" element={<TourForm />} />
+        <Route path="estadias" element={<EstadiasList />} />
+        <Route path="estadias/nuevo" element={<EstadiaForm />} />
+        <Route path="estadias/:id/editar" element={<EstadiaForm />} />
+        <Route path="calendario" element={<CalendarView />} />
+        <Route path="productos" element={<Productos />} />
+        <Route path="disponibilidad" element={<DisponibilidadAdmin />} />
+        <Route path="admin" element={<AdminPanel />} />
+      </Route>
+      <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
 
 function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="tours" element={<ToursList />} />
-            <Route path="tours/nuevo" element={<TourForm />} />
-            <Route path="tours/:id/editar" element={<TourForm />} />
-            <Route path="estadias" element={<EstadiasList />} />
-            <Route path="estadias/nuevo" element={<EstadiaForm />} />
-            <Route path="estadias/:id/editar" element={<EstadiaForm />} />
-            <Route path="calendario" element={<CalendarView />} />
-            <Route path="productos" element={<Productos />} />
-            <Route path="admin" element={<AdminPanel />} />
-          </Route>
-        </Routes>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>
   )

@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Calendar, MapPin, Download } from 'lucide-react'
-import { getTours, getCharts } from '../api/api'
+import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Calendar, MapPin, Download, CheckCircle, XCircle, Building2, ChevronDown, ChevronUp, Image, FileText, Trash2 } from 'lucide-react'
+import { getTours, getCharts, aprobarTour, rechazarTour, updateTourStatus, getTourById, deleteTour } from '../api/api'
 import type { Tour, Meta } from '../api/api'
 import { downloadCSV } from '../utils/exportUtils'
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string }> = {
-  'Pagado':    { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  'Reservado': { bg: 'bg-turquoise-50', text: 'text-turquoise-700', dot: 'bg-turquoise-500' },
-  'Consulta':  { bg: 'bg-arena-50', text: 'text-arena-700', dot: 'bg-arena-500' },
-  'Cancelado': { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-  'Cerrado':   { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' },
+  'Pagado':      { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
+  'Reservado':   { bg: 'bg-turquoise-50', text: 'text-turquoise-700', dot: 'bg-turquoise-500' },
+  'Aprobado':    { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
+  'Consulta':    { bg: 'bg-arena-50', text: 'text-arena-700', dot: 'bg-arena-500' },
+  'Por Aprobar': { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
+  'Rechazado':   { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
+  'Cancelado':   { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
+  'Cerrado':     { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' },
 }
 
 interface PeriodStats { cantidad: number; ingresos: number; ganancia: number }
@@ -34,6 +37,13 @@ export default function ToursList() {
   const [periodStats, setPeriodStats] = useState<Record<string, PeriodStats>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [rejectModal, setRejectModal] = useState<{ id: number; cliente: string } | null>(null)
+  const [rejectMotivo, setRejectMotivo] = useState('')
+  const [actionLoading, setActionLoading] = useState(false)
+  const [expandedTourId, setExpandedTourId] = useState<number | null>(null)
+  const [expandedDetail, setExpandedDetail] = useState<any>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{ id: number; cliente: string } | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -73,6 +83,71 @@ export default function ToursList() {
   useEffect(() => { loadTours() }, [activeStatus, activePeriod])
   const handleSearch = () => loadTours(1)
   const currentStats = periodStats[activePeriod]
+
+  const handleAprobar = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (actionLoading) return
+    setActionLoading(true)
+    try {
+      const res = await aprobarTour(id)
+      if (res.success) loadTours(meta.page)
+    } catch { }
+    setActionLoading(false)
+  }
+
+  const handleReservar = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (actionLoading) return
+    setActionLoading(true)
+    try {
+      const res = await updateTourStatus(id, 'Reservado')
+      if (res.success) loadTours(meta.page)
+    } catch { }
+    setActionLoading(false)
+  }
+
+  const handleExpandToggle = async (tour: Tour) => {
+    if (expandedTourId === tour.id) {
+      setExpandedTourId(null)
+      setExpandedDetail(null)
+      return
+    }
+    setExpandedTourId(tour.id)
+    setDetailLoading(true)
+    try {
+      const res = await getTourById(tour.id)
+      if (res.success) setExpandedDetail(res.data)
+      else setExpandedDetail(tour)
+    } catch {
+      setExpandedDetail(tour)
+    }
+    setDetailLoading(false)
+  }
+
+  const handleRechazar = async () => {
+    if (!rejectModal || actionLoading) return
+    setActionLoading(true)
+    try {
+      const res = await rechazarTour(rejectModal.id, rejectMotivo)
+      if (res.success) { setRejectModal(null); setRejectMotivo(''); loadTours(meta.page) }
+    } catch { }
+    setActionLoading(false)
+  }
+
+  const handleDelete = async () => {
+    if (!deleteModal || actionLoading) return
+    setActionLoading(true)
+    try {
+      const res = await deleteTour(deleteModal.id)
+      if (res.success) {
+        setDeleteModal(null)
+        setExpandedTourId(null)
+        setExpandedDetail(null)
+        loadTours(meta.page)
+      }
+    } catch { }
+    setActionLoading(false)
+  }
 
   return (
     <div className="space-y-4">
@@ -185,6 +260,7 @@ export default function ToursList() {
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Responsable</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
+                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Origen</th>
                   <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ingreso</th>
                   <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ganancia</th>
                   <th className="px-4 py-3 w-8"></th>
@@ -194,8 +270,11 @@ export default function ToursList() {
                 {tours.length > 0 ? tours.map((t, i) => {
                   const conf = statusConfig[t.estatus] || statusConfig['Cerrado']
                   return (
-                    <tr key={t.id} className={`hover:bg-turquoise-50/30 cursor-pointer transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}
-                      onClick={() => navigate(`/tours/${t.id}/editar`)}>
+                    <React.Fragment key={t.id}>
+                    <tr className={`hover:bg-turquoise-50/30 cursor-pointer transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'} ${expandedTourId === t.id ? 'bg-blue-50/40' : ''}`}
+                      onClick={() => {
+                        handleExpandToggle(t)
+                      }}>
                       <td className="px-4 py-3">
                         <p className="font-medium text-azul-900 text-sm">{t.cliente}</p>
                         {t.whatsapp && <p className="text-[11px] text-gray-400">{t.whatsapp}</p>}
@@ -216,18 +295,120 @@ export default function ToursList() {
                           {t.estatus}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        {t.fuente === 'partner-portal' ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 font-medium">
+                            <Building2 className="w-3 h-3" /> {t.vendedor || 'Partner'}
+                          </span>
+                        ) : t.fuente === 'openclaw' ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-medium">
+                            <Bot className="w-3 h-3" /> AI
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-turquoise-50 text-turquoise-700 border border-turquoise-200 font-medium">
+                            🏠 Mahana
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right text-sm font-medium text-azul-900">{fmt(t.precio_ingreso || 0)}</td>
                       <td className={`px-4 py-3 text-right text-sm font-semibold ${(t.ganancia_mahana || 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                         {fmt(t.ganancia_mahana || 0)}
                       </td>
                       <td className="px-4 py-2.5 text-center">
-                        {t.fuente === 'openclaw' && <Bot className="w-3.5 h-3.5 text-purple-400 inline" />}
-                        {t.fuente === 'manual' && <User className="w-3.5 h-3.5 text-gray-300 inline" />}
+                        <div className="flex items-center gap-1 justify-center">
+                          {expandedTourId === t.id ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                        </div>
                       </td>
                     </tr>
+                    {/* Expanded detail row */}
+                    {expandedTourId === t.id && (
+                      <tr>
+                        <td colSpan={9} className="px-0 py-0">
+                          <div className="bg-gradient-to-r from-blue-50/60 to-orange-50/40 border-t border-b border-blue-100 px-6 py-5">
+                            {detailLoading ? (
+                              <div className="flex items-center justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
+                            ) : expandedDetail ? (
+                              <div className="flex gap-6">
+                                {/* Left: Client details */}
+                                <div className="flex-1 space-y-3">
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                                    <div><span className="text-gray-400 text-xs block">Cliente</span><span className="font-medium text-gray-900">{expandedDetail.cliente}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">WhatsApp</span><span className="font-medium text-gray-900">{expandedDetail.whatsapp || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Email</span><span className="font-medium text-gray-900">{expandedDetail.email_cliente || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Hotel</span><span className="font-medium text-gray-900">{expandedDetail.hotel || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Nacionalidad</span><span className="font-medium text-gray-900">{expandedDetail.nacionalidad || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Idioma</span><span className="font-medium text-gray-900">{expandedDetail.idioma || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Personas</span><span className="font-medium text-gray-900">{expandedDetail.pax || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Edades</span><span className="font-medium text-gray-900">{expandedDetail.edades || '—'}</span></div>
+                                    <div><span className="text-gray-400 text-xs block">Solicitado por</span><span className="font-semibold text-blue-700">{expandedDetail.solicitado_por || '—'}</span></div>
+                                  </div>
+                                  {expandedDetail.notas && (
+                                    <div className="bg-white/70 rounded-lg p-3 text-sm border border-gray-200">
+                                      <span className="text-gray-400 text-xs block mb-1">Notas</span>
+                                      <p className="text-gray-700">{expandedDetail.notas}</p>
+                                    </div>
+                                  )}
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-2 pt-2">
+                                    {t.estatus === 'Por Aprobar' && (
+                                      <>
+                                        <button onClick={(e) => handleAprobar(t.id, e)} disabled={actionLoading}
+                                          className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 shadow-sm">
+                                          <CheckCircle className="w-4 h-4" /> Aprobar
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); setRejectModal({ id: t.id, cliente: t.cliente }) }} disabled={actionLoading}
+                                          className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 shadow-sm">
+                                          <XCircle className="w-4 h-4" /> Rechazar
+                                        </button>
+                                      </>
+                                    )}
+                                    {t.estatus === 'Aprobado' && (
+                                      <button onClick={(e) => handleReservar(t.id, e)} disabled={actionLoading}
+                                        className="flex items-center gap-1.5 px-4 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 shadow-sm">
+                                        <CheckCircle className="w-4 h-4" /> Marcar como Reservado
+                                      </button>
+                                    )}
+                                    <button onClick={() => navigate(`/tours/${t.id}/editar`)}
+                                      className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-white">
+                                      Editar completo
+                                    </button>
+                                    <button onClick={(e) => { e.stopPropagation(); setDeleteModal({ id: t.id, cliente: t.cliente }) }}
+                                      className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors ml-auto">
+                                      <Trash2 className="w-4 h-4" /> Eliminar
+                                    </button>
+                                  </div>
+                                </div>
+                                {/* Right: Comprobante */}
+                                <div className="w-56 shrink-0">
+                                  <span className="text-gray-400 text-xs block mb-2 font-medium uppercase tracking-wide">Comprobante de pago</span>
+                                  {expandedDetail.comprobante_url ? (
+                                    <a href={expandedDetail.comprobante_url} target="_blank" rel="noopener noreferrer" className="block">
+                                      {/\.(jpg|jpeg|png|gif|webp)$/i.test(expandedDetail.comprobante_url) ? (
+                                        <img src={expandedDetail.comprobante_url} alt="Comprobante" className="w-full rounded-xl border-2 border-gray-200 shadow-md hover:shadow-lg transition-shadow object-contain bg-white max-h-48" />
+                                      ) : (
+                                        <div className="flex items-center gap-2 px-4 py-3 bg-white rounded-xl border-2 border-gray-200 hover:border-blue-300 transition-colors">
+                                          <FileText className="w-6 h-6 text-blue-500" />
+                                          <span className="text-sm text-blue-600 font-medium">Ver archivo PDF</span>
+                                        </div>
+                                      )}
+                                    </a>
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center py-6 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 text-gray-400">
+                                      <Image className="w-8 h-8 mb-1 opacity-40" />
+                                      <span className="text-xs">Sin comprobante</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   )
                 }) : (
-                  <tr><td colSpan={8} className="px-4 py-10 text-center text-gray-400 text-sm">No hay tours en este período</td></tr>
+                  <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400 text-sm">No hay tours en este período</td></tr>
                 )}
               </tbody>
             </table>
@@ -257,9 +438,22 @@ export default function ToursList() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-green-600">{fmt(t.precio_ingreso || 0)}</span>
                       <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">→ {fmt(t.ganancia_mahana || 0)}</span>
-                      {t.fuente === 'openclaw' && <Bot className="w-3 h-3 text-purple-400" />}
+                  {t.fuente === 'openclaw' && <Bot className="w-3 h-3 text-purple-400" />}
+                      {t.fuente === 'partner-portal' && <span className="text-[9px] text-orange-500 font-medium">Partner</span>}
                     </div>
                   </div>
+                  {t.estatus === 'Por Aprobar' && (
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+                      <button onClick={(e) => handleAprobar(t.id, e)} disabled={actionLoading}
+                        className="flex-1 py-1.5 rounded-lg bg-green-100 text-green-700 text-xs font-medium hover:bg-green-200 transition-colors flex items-center justify-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Aprobar
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); setRejectModal({ id: t.id, cliente: t.cliente }) }} disabled={actionLoading}
+                        className="flex-1 py-1.5 rounded-lg bg-red-100 text-red-700 text-xs font-medium hover:bg-red-200 transition-colors flex items-center justify-center gap-1">
+                        <XCircle className="w-3.5 h-3.5" /> Rechazar
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             }) : (
@@ -282,6 +476,59 @@ export default function ToursList() {
             </div>
           )}
         </>
+      )}
+
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setRejectModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Rechazar Tour</h3>
+            <p className="text-sm text-gray-500 mb-4">Tour de <strong>{rejectModal.cliente}</strong></p>
+            <textarea
+              value={rejectMotivo}
+              onChange={(e) => setRejectMotivo(e.target.value)}
+              placeholder="Motivo del rechazo (ej: comprobante incorrecto, tour no disponible...)"
+              className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+              rows={3}
+            />
+            <div className="flex items-center gap-3 mt-4">
+              <button onClick={() => { setRejectModal(null); setRejectMotivo('') }}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleRechazar} disabled={actionLoading}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-medium text-sm hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
+                <XCircle className="w-4 h-4" /> Rechazar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-100 rounded-full"><Trash2 className="w-5 h-5 text-red-600" /></div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Eliminar Tour</h3>
+                <p className="text-sm text-gray-500">Esta acción se puede revertir desde el log</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-700 mb-4">¿Estás seguro de eliminar el tour de <strong>{deleteModal.cliente}</strong>? El tour no se eliminará permanentemente — quedará registrado en el historial.</p>
+            <div className="flex items-center gap-3">
+              <button onClick={() => setDeleteModal(null)}
+                className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-700 font-medium text-sm hover:bg-gray-200 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleDelete} disabled={actionLoading}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-medium text-sm hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-1">
+                <Trash2 className="w-4 h-4" /> Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

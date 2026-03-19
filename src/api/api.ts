@@ -9,6 +9,28 @@ const api = axios.create({
 const API_KEY = import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026'
 const authHeaders = { 'X-API-Key': API_KEY }
 
+// ── JWT Interceptor ──
+// Automatically attach Bearer token from localStorage to all requests
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('mahana_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Auto-logout on 401 responses (token expired)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && error.response?.data?.error?.code === 'TOKEN_EXPIRED') {
+      localStorage.removeItem('mahana_token')
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
 // ── Types ──
 
 export interface Tour {
@@ -107,6 +129,29 @@ export interface Staff {
   activo: number
 }
 
+export interface Slot {
+  id: number
+  actividad_id: number
+  fecha: string
+  hora: string
+  capacidad: number
+  reservados: number
+  bloqueado: number
+  notas: string | null
+  created_at: string
+  actividad_nombre?: string
+}
+
+export interface Plantilla {
+  id: number
+  actividad_id: number
+  dia_semana: number
+  hora: string
+  capacidad: number
+  activa: number
+  actividad_nombre?: string
+}
+
 export interface Meta {
   total: number
   page: number
@@ -134,7 +179,7 @@ export interface DashboardData {
   tours_mahana: { total: number; ingresos: number; ganancia: number }
   ventas_partners: { total: number; ingresos: number; comisiones: number }
   estadias: { total: number; pendientes: number; confirmadas: number; comisiones: number }
-  tours_por_estatus: { pagados: number; reservados: number; consultas: number }
+  tours_por_estatus: { pagados: number; reservados: number; consultas: number; por_aprobar: number }
   recientes: Array<{
     tipo: string
     id: number
@@ -149,6 +194,30 @@ export interface DashboardData {
   mesActual?: string
   mesSeleccionado?: string
   mesesDisponibles?: string[]
+}
+
+// ── Auth ──
+
+export async function login(email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> {
+  try {
+    const response = await api.post('/auth/login', { email, password })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: null as any, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getMe(token?: string): Promise<ApiResponse<any>> {
+  try {
+    const headers: Record<string, string> = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+    const response = await api.get('/auth/me', { headers })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: null, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
 }
 
 // ── Tours ──
@@ -168,18 +237,18 @@ export async function getTourById(id: number): Promise<ApiResponse<Tour>> {
   return response.data
 }
 
-export async function createTour(data: Partial<Tour>): Promise<ApiResponse<Tour>> {
-  const response = await api.post('/tours', data, { headers: authHeaders })
+export async function createTour(data: Partial<Tour> & { slot_id?: number; pax?: number }): Promise<ApiResponse<Tour>> {
+  const response = await api.post('/tours', data)
   return response.data
 }
 
 export async function updateTour(id: number, data: Partial<Tour>): Promise<ApiResponse<Tour>> {
-  const response = await api.put(`/tours/${id}`, data, { headers: authHeaders })
+  const response = await api.put(`/tours/${id}`, data)
   return response.data
 }
 
 export async function updateTourStatus(id: number, estatus: string): Promise<ApiResponse<Tour>> {
-  const response = await api.patch(`/tours/${id}/status`, { estatus }, { headers: authHeaders })
+  const response = await api.patch(`/tours/${id}/status`, { estatus })
   return response.data
 }
 
@@ -217,9 +286,9 @@ export async function updateEstadiaStatus(id: number, estado: string): Promise<A
 
 // ── Dashboard ──
 
-export async function getDashboard(): Promise<ApiResponse<DashboardData>> {
+export async function getDashboard(params: Record<string, string> = {}): Promise<ApiResponse<DashboardData>> {
   try {
-    const response = await api.get('/dashboard')
+    const response = await api.get('/dashboard', { params })
     return response.data
   } catch (err) {
     console.error('Error fetching dashboard:', err)
@@ -284,7 +353,7 @@ export async function updatePropiedad(id: number, data: Partial<Propiedad>): Pro
   return response.data
 }
 
-export async function deletePropiedad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>> {
+export async function deletePropiedad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>>{
   const response = await api.delete(`/propiedades/${id}`, { headers: authHeaders })
   return response.data
 }
@@ -327,4 +396,180 @@ export async function getCalendarData(mes?: string): Promise<ApiResponse<any>> {
   } catch (err) {
     return { success: false, data: null, error: { code: 'NETWORK', message: 'Error de conexión' } }
   }
+}
+
+// ── Availability: Slots ──
+
+export async function getDisponibilidad(params: Record<string, string> = {}): Promise<ApiResponse<Slot[]>> {
+  try {
+    const response = await api.get('/disponibilidad', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getDisponibilidadSemana(desde: string): Promise<ApiResponse<any>> {
+  try {
+    const response = await api.get('/disponibilidad/semana', { params: { desde } })
+    return response.data
+  } catch (err) {
+    return { success: false, data: null, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function createSlot(data: Partial<Slot>): Promise<ApiResponse<Slot>> {
+  const response = await api.post('/slots', data)
+  return response.data
+}
+
+export async function updateSlot(id: number, data: Partial<Slot>): Promise<ApiResponse<Slot>> {
+  const response = await api.put(`/slots/${id}`, data)
+  return response.data
+}
+
+export async function deleteSlot(id: number): Promise<ApiResponse<{ deleted: boolean }>> {
+  const response = await api.delete(`/slots/${id}`)
+  return response.data
+}
+
+// ── Availability: Plantillas ──
+
+export async function getPlantillas(): Promise<ApiResponse<Plantilla[]>> {
+  try {
+    const response = await api.get('/plantillas')
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function createPlantilla(data: Partial<Plantilla>): Promise<ApiResponse<Plantilla>> {
+  const response = await api.post('/plantillas', data)
+  return response.data
+}
+
+export async function generarSlotsMes(data: { mes: string; actividad_id?: number }): Promise<ApiResponse<{ created: number }>> {
+  const response = await api.post('/plantillas/generar', data)
+  return response.data
+}
+
+// ── File Upload ──
+
+export async function uploadFile(file: File): Promise<ApiResponse<{ url: string; filename: string; size: number }>> {
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/uploads', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000, // 30s for uploads
+    })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: { url: '', filename: '', size: 0 }, error: { code: 'NETWORK', message: 'Error al subir archivo' } }
+  }
+}
+
+// ── Partner Dashboard ──
+
+export interface PartnerDashboardData {
+  kpis: {
+    total_tours: number
+    total_pagado: number
+    itbm: number
+    total_comision: number
+    por_aprobar: number
+    aprobados: number
+    reservados: number
+    rechazados: number
+  }
+  topTours: Array<{ nombre: string; cantidad: number; monto: number }>
+  ingresosPorMes: Array<{ mes: string; cantidad: number; ingresos: number; comision: number }>
+  clientesRecientes: Array<{
+    cliente: string
+    actividad: string
+    fecha: string
+    estatus: string
+    costo_pago: number | null
+    whatsapp: string | null
+  }>
+  mesActual: string
+  mesSeleccionado: string
+  mesesDisponibles: string[]
+}
+
+export async function getPartnerDashboard(params: Record<string, string> = {}): Promise<ApiResponse<PartnerDashboardData>> {
+  try {
+    const response = await api.get('/partner/dashboard', { params })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: {} as PartnerDashboardData, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function updatePartnerTour(id: number, data: Record<string, any>): Promise<ApiResponse<Tour>> {
+  try {
+    const response = await api.put(`/partner/tours/${id}`, data)
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: {} as Tour, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+// ── Tour Approval ──
+
+export async function aprobarTour(id: number): Promise<ApiResponse<Tour>> {
+  const response = await api.post(`/tours/${id}/aprobar`)
+  return response.data
+}
+
+export async function rechazarTour(id: number, motivo: string): Promise<ApiResponse<Tour>> {
+  const response = await api.post(`/tours/${id}/rechazar`, { motivo })
+  return response.data
+}
+
+export async function deleteTour(id: number): Promise<ApiResponse<{ id: number; eliminado: boolean }>> {
+  const response = await api.delete(`/tours/${id}`)
+  return response.data
+}
+
+export async function getDeletedTours(): Promise<ApiResponse<Tour[]>> {
+  try {
+    const response = await api.get('/tours/deleted')
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+// ── Alertas ──
+
+export interface Alerta {
+  id: number
+  tipo: string
+  mensaje: string
+  referencia_tipo: string | null
+  referencia_id: number | null
+  datos_extra: string | null
+  leida: number
+  created_at: string
+}
+
+export async function getAlertas(params: Record<string, string> = {}): Promise<ApiResponse<{ alertas: Alerta[]; sin_leer: number }>> {
+  try {
+    const response = await api.get('/alertas', { params })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: { alertas: [], sin_leer: 0 }, error: { code: 'NETWORK', message: 'Error' } }
+  }
+}
+
+export async function marcarAlertaLeida(id: number): Promise<ApiResponse<Alerta>> {
+  const response = await api.patch(`/alertas/${id}`)
+  return response.data
 }
