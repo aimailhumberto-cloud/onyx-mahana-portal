@@ -319,8 +319,12 @@ export async function createActividad(data: Partial<Actividad>): Promise<ApiResp
 }
 
 export async function updateActividad(id: number, data: Partial<Actividad>): Promise<ApiResponse<Actividad>> {
-  const response = await api.put(`/actividades/${id}`, data, { headers: authHeaders })
-  return response.data
+  try {
+    const response = await api.put(`/actividades/${id}`, data, { headers: authHeaders })
+    return response.data
+  } catch (err: any) {
+    return { success: false, data: {} as Actividad, error: { code: 'NETWORK', message: err.response?.data?.error?.message || 'Error al actualizar actividad' } }
+  }
 }
 
 export async function deleteActividad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>> {

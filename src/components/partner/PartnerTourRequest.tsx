@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getActividades, getDisponibilidad, createTour, uploadFile } from '../../api/api'
 import type { Actividad, Slot } from '../../api/api'
-import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle } from 'lucide-react'
+import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle, Search, ImageIcon } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 export default function PartnerTourRequest() {
@@ -34,6 +34,8 @@ export default function PartnerTourRequest() {
     vendedor_nombre: user?.nombre || '',
     habitacion: '',
   })
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Comprobante upload
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null)
@@ -166,6 +168,15 @@ export default function PartnerTourRequest() {
     return acc
   }, {} as Record<string, Actividad[]>)
 
+  // Filter by search query
+  const filteredGroups = searchQuery.trim()
+    ? Object.entries(groupedActivities).reduce((acc, [cat, acts]) => {
+        const filtered = acts.filter(a => a.nombre.toLowerCase().includes(searchQuery.toLowerCase()))
+        if (filtered.length > 0) acc[cat] = filtered
+        return acc
+      }, {} as Record<string, Actividad[]>)
+    : groupedActivities
+
   if (loadingActs) {
     return <div className="flex items-center justify-center h-60"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
   }
@@ -210,8 +221,20 @@ export default function PartnerTourRequest() {
 
       {/* Step 1: Select Activity — Grouped by Category */}
       {step === 1 && (
-        <div className="space-y-6">
-          {Object.entries(groupedActivities).map(([category, acts]) => (
+        <div className="space-y-4">
+          {/* Search input */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Buscar por nombre de actividad..."
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm"
+            />
+          </div>
+
+          {Object.entries(filteredGroups).map(([category, acts]) => (
             <div key={category}>
               <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-blue-500" />
@@ -224,14 +247,25 @@ export default function PartnerTourRequest() {
                     onClick={() => handleSelectActivity(act)}
                     className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 hover:border-blue-300 hover:shadow-md transition-all text-left group"
                   >
-                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">{act.nombre}</h3>
-                    {act.precio_base != null && act.precio_base > 0 && (
-                      <span className="text-sm text-emerald-600 font-medium">${act.precio_base}</span>
-                    )}
-                    <div className="mt-2 space-y-1 text-sm text-gray-500">
-                      {act.duracion && <p className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {act.duracion}</p>}
-                      {act.punto_encuentro && <p className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {act.punto_encuentro}</p>}
-                      {act.capacidad_max && <p className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Max {act.capacidad_max} personas</p>}
+                    <div className="flex items-start gap-3">
+                      {act.imagen_url ? (
+                        <img src={act.imagen_url} alt={act.nombre} className="w-14 h-14 rounded-lg object-cover shadow-sm ring-1 ring-gray-200 flex-shrink-0" />
+                      ) : (
+                        <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-gray-100 to-gray-50 flex items-center justify-center flex-shrink-0 ring-1 ring-gray-200">
+                          <ImageIcon className="w-6 h-6 text-gray-300" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors">{act.nombre}</h3>
+                        {act.precio_base != null && act.precio_base > 0 && (
+                          <span className="text-sm text-emerald-600 font-medium">${act.precio_base}</span>
+                        )}
+                        <div className="mt-1.5 space-y-0.5 text-sm text-gray-500">
+                          {act.duracion && <p className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {act.duracion}</p>}
+                          {act.punto_encuentro && <p className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" /> {act.punto_encuentro}</p>}
+                          {act.capacidad_max && <p className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> Max {act.capacidad_max} personas</p>}
+                        </div>
+                      </div>
                     </div>
                     {act.descripcion && <p className="text-xs text-gray-400 mt-2 line-clamp-2">{act.descripcion}</p>}
                   </button>
@@ -239,6 +273,13 @@ export default function PartnerTourRequest() {
               </div>
             </div>
           ))}
+
+          {Object.keys(filteredGroups).length === 0 && searchQuery && (
+            <div className="text-center py-8 text-gray-400">
+              <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p>No se encontraron actividades para "{searchQuery}"</p>
+            </div>
+          )}
         </div>
       )}
 
