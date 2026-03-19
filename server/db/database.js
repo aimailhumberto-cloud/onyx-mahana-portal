@@ -3,7 +3,11 @@ const fs = require('fs');
 const path = require('path');
 const { hashPassword } = require('../auth');
 
-const DB_PATH = path.join(__dirname, '../../data/mahana.db');
+// In production (Render), use persistent disk at /data; locally use relative path
+const isProduction = process.env.NODE_ENV === 'production';
+const DB_DIR = isProduction && fs.existsSync('/data') ? '/data' : path.join(__dirname, '../../data');
+if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+const DB_PATH = path.join(DB_DIR, 'mahana.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
 let db;
