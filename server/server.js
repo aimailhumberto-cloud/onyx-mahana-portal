@@ -117,9 +117,14 @@ app.get('/api/v1/debug-users', requireApiKey, (req, res) => {
     const db = getDb();
     const users = db.prepare('SELECT id, email, nombre, rol, vendedor, activo FROM usuarios').all();
     const dbPath = db.name;
-    success(res, { dbPath, users, count: users.length });
+    // Test bcrypt
+    const testHash = require('bcryptjs').hashSync('test123', 10);
+    const testVerify = require('bcryptjs').compareSync('test123', testHash);
+    // Check table info
+    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='usuarios'").get();
+    success(res, { dbPath, users, count: users.length, bcryptWorks: testVerify, tableSchema: tableInfo?.sql });
   } catch (err) {
-    error(res, 'SERVER_ERROR', err.message, 500);
+    res.status(500).json({ success: false, error: err.message, stack: err.stack });
   }
 });
 
