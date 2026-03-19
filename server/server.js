@@ -111,6 +111,18 @@ app.get('/api/v1/api-status', (req, res) => {
   });
 });
 
+// TEMPORARY DEBUG: check users in DB (remove in production)
+app.get('/api/v1/debug-users', requireApiKey, (req, res) => {
+  try {
+    const db = getDb();
+    const users = db.prepare('SELECT id, email, nombre, rol, vendedor, activo FROM usuarios').all();
+    const dbPath = db.name;
+    success(res, { dbPath, users, count: users.length });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', err.message, 500);
+  }
+});
+
 // ══════════════════════════════════════
 // AUTH ENDPOINTS
 // ══════════════════════════════════════
