@@ -64,6 +64,10 @@ function getDb() {
     // Product image support
     addCol('actividades', 'imagen_url', 'TEXT');
 
+    // Timestamps for actividades (update() always sets updated_at)
+    addCol('actividades', 'created_at', "TEXT DEFAULT (datetime('now'))");
+    addCol('actividades', 'updated_at', "TEXT DEFAULT (datetime('now'))");
+
     // Rename old categories to new names
     const renameCat = (oldName, newName) => {
       db.prepare('UPDATE actividades SET categoria = ? WHERE categoria = ?').run(newName, oldName);

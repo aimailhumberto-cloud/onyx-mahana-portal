@@ -99,8 +99,15 @@ export default function Productos() {
     setUploading(false)
   }
   const toggleActivo = async (a: Actividad) => {
-    await updateActividad(a.id, { activa: a.activa ? 0 : 1 })
-    fetchAll()
+    try {
+      const res = await updateActividad(a.id, { activa: a.activa ? 0 : 1 })
+      if (res.success) {
+        showToast('success', a.activa ? 'Producto desactivado' : 'Producto activado')
+        fetchAll()
+      } else {
+        showToast('error', res.error?.message || 'Error al cambiar estado')
+      }
+    } catch { showToast('error', 'Error de conexión') }
   }
   const doDeleteAct = async (id: number) => {
     try {
