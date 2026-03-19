@@ -149,6 +149,11 @@ function getDb() {
       insertUser.run('admin@mahana.com', hashPassword('mahana2026'), 'Mahana Admin', 'admin', null);
       insertUser.run('caracol@playacaracol.com', hashPassword('caracol2026'), 'Playa Caracol', 'partner', 'Playa Caracol');
       console.log('✅ Seeded 2 users (admin + partner)');
+    } else {
+      // Ensure known credentials work (reset passwords on existing users)
+      const resetPw = db.prepare('UPDATE usuarios SET password_hash = ? WHERE email = ?');
+      resetPw.run(hashPassword('mahana2026'), 'admin@mahana.com');
+      resetPw.run(hashPassword('caracol2026'), 'caracol@playacaracol.com');
     }
 
     console.log('✅ Database initialized at', DB_PATH);
