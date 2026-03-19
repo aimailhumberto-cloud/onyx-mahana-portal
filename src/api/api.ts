@@ -104,6 +104,7 @@ export interface Actividad {
   comision_caracol_pct: number | null
   capacidad_max: number | null
   transporte: number | null
+  imagen_url: string | null
 }
 
 export interface Propiedad {

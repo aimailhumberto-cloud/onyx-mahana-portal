@@ -378,15 +378,7 @@ app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin'), (req, r
   }
 });
 
-app.delete('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
-  try {
-    const removed = remove('reservas_tours', req.params.id);
-    if (!removed) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
-    success(res, { deleted: true, id: req.params.id });
-  } catch (err) {
-    error(res, 'SERVER_ERROR', 'Error deleting tour', 500);
-  }
-});
+// (dead code removed — soft delete on line 228 handles DELETE /tours/:id)
 
 // ══════════════════════════════════════
 // ESTADÍAS ENDPOINTS
@@ -1157,7 +1149,7 @@ app.post('/api/v1/actividades', requireApiKey, (req, res) => {
       'categoria', 'descripcion', 'unidad', 'duracion', 'horario',
       'punto_encuentro', 'que_incluye', 'que_llevar', 'requisitos',
       'disponibilidad', 'costo_instructor', 'comision_caracol_pct',
-      'capacidad_max', 'transporte'];
+      'capacidad_max', 'transporte', 'imagen_url'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined && req.body[field] !== null) {
@@ -1186,7 +1178,7 @@ app.put('/api/v1/actividades/:id', requireApiKey, (req, res) => {
       'categoria', 'descripcion', 'unidad', 'duracion', 'horario',
       'punto_encuentro', 'que_incluye', 'que_llevar', 'requisitos',
       'disponibilidad', 'costo_instructor', 'comision_caracol_pct',
-      'capacidad_max', 'transporte'];
+      'capacidad_max', 'transporte', 'imagen_url'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined) {

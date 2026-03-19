@@ -42,6 +42,17 @@ function getDb() {
     addCol('reservas_tours', 'eliminado_por', 'TEXT');
     addCol('reservas_tours', 'eliminado_at', 'TEXT');
 
+    // Product image support
+    addCol('actividades', 'imagen_url', 'TEXT');
+
+    // Rename old categories to new names
+    const renameCat = (oldName, newName) => {
+      db.prepare('UPDATE actividades SET categoria = ? WHERE categoria = ?').run(newName, oldName);
+    };
+    renameCat('Acuática', 'Acuáticas');
+    renameCat('Eco Adventure', 'Premium Adventures');
+    renameCat('City Tour', 'City Tours');
+
     // Alertas table for AI agent monitoring
     db.exec(`
       CREATE TABLE IF NOT EXISTS alertas (
@@ -86,17 +97,17 @@ function getDb() {
     const setCat = (nombre, categoria) => {
       db.prepare("UPDATE actividades SET categoria = ? WHERE nombre = ? AND (categoria IS NULL OR categoria = '')").run(categoria, nombre);
     };
-    setCat('Academia de Surf', 'Acuática');
-    setCat('Mulita', 'Acuática');
-    setCat('Tour de Pesca Otoque y Bona', 'Acuática');
-    setCat('Tubing Inflable', 'Acuática');
-    setCat('Ratfing Tubing Cajones', 'Acuática');
-    setCat('Rafting Tubing Cajones', 'Acuática');
-    setCat('Rappel Cascada Filipinas', 'Eco Adventure');
-    setCat('Hiking Cerro Chame', 'Eco Adventure');
-    setCat('Tour Cascada Filipinas', 'Eco Adventure');
-    setCat('Day Trip El Valle de Antón', 'City Tour');
-    setCat('Escápate a Isla Otoque y Bona', 'City Tour');
+    setCat('Academia de Surf', 'Acuáticas');
+    setCat('Mulita', 'Acuáticas');
+    setCat('Tour de Pesca Otoque y Bona', 'Acuáticas');
+    setCat('Tubing Inflable', 'Acuáticas');
+    setCat('Ratfing Tubing Cajones', 'Acuáticas');
+    setCat('Rafting Tubing Cajones', 'Acuáticas');
+    setCat('Rappel Cascada Filipinas', 'Premium Adventures');
+    setCat('Hiking Cerro Chame', 'Hiking & Tours');
+    setCat('Tour Cascada Filipinas', 'Hiking & Tours');
+    setCat('Day Trip El Valle de Antón', 'City Tours');
+    setCat('Escápate a Isla Otoque y Bona', 'City Tours');
     setCat('Otro', 'Otro');
 
     // ── Propiedades table ──

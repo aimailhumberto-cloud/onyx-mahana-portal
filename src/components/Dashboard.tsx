@@ -50,7 +50,7 @@ export default function Dashboard() {
       const chartParams: Record<string, string> = param ? { mes: param } : {}
 
       const [dashRes, chartRes] = await Promise.all([
-        getDashboard(),
+        getDashboard(chartParams),
         getCharts(chartParams)
       ])
 

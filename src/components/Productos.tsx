@@ -2,25 +2,27 @@ import { useState, useEffect } from 'react'
 import {
   Plus, Edit3, Trash2, ToggleLeft, ToggleRight, X, Save, Loader2,
   Waves, Mountain, MapPin, Truck, Package, Search, AlertCircle, CheckCircle,
-  Building2, Clock, Users, DollarSign, ChevronDown, ChevronUp
+  Building2, Clock, Users, DollarSign, ChevronDown, ChevronUp, ImageIcon
 } from 'lucide-react'
 import {
   getActividades, createActividad, updateActividad, deleteActividad,
   getPropiedades, createPropiedad, updatePropiedad, deletePropiedad,
+  uploadFile,
 } from '../api/api'
 import type { Actividad, Propiedad } from '../api/api'
 
 // ── Category config ──
 const CATEGORIAS = [
-  { key: 'Acuática', label: '🏄 Acuática', icon: Waves, color: 'bg-blue-50 border-blue-200 text-blue-700' },
-  { key: 'Eco Adventure', label: '🌿 Eco Adventure', icon: Mountain, color: 'bg-green-50 border-green-200 text-green-700' },
-  { key: 'City Tour', label: '🏙️ City Tour', icon: MapPin, color: 'bg-amber-50 border-amber-200 text-amber-700' },
+  { key: 'Acuáticas', label: '🏄 Acuáticas', icon: Waves, color: 'bg-blue-50 border-blue-200 text-blue-700' },
+  { key: 'Premium Adventures', label: '🌿 Premium Adventures', icon: Mountain, color: 'bg-green-50 border-green-200 text-green-700' },
+  { key: 'Hiking & Tours', label: '🥾 Hiking & Tours', icon: MapPin, color: 'bg-amber-50 border-amber-200 text-amber-700' },
+  { key: 'City Tours', label: '🏙️ City Tours', icon: MapPin, color: 'bg-orange-50 border-orange-200 text-orange-700' },
   { key: 'Transporte', label: '🚐 Transporte', icon: Truck, color: 'bg-purple-50 border-purple-200 text-purple-700' },
   { key: 'Otro', label: '📦 Otro', icon: Package, color: 'bg-gray-50 border-gray-200 text-gray-600' },
 ]
 
 const EMPTY_ACT: Partial<Actividad> = {
-  nombre: '', tipo: 'tour', categoria: 'Acuática', descripcion: '', unidad: 'Por pax',
+  nombre: '', tipo: 'tour', categoria: 'Acuáticas', descripcion: '', unidad: 'Por pax',
   duracion: '', horario: '', punto_encuentro: '', que_incluye: '', que_llevar: '',
   requisitos: '', disponibilidad: 'Todo el año', precio_base: null, costo_base: null,
   costo_instructor: null, comision_caracol_pct: null, capacidad_max: null, transporte: 0, activa: 1,
@@ -46,6 +48,7 @@ export default function Productos() {
   const [propForm, setPropForm] = useState<Partial<Propiedad>>(EMPTY_PROP)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   // Expanded cards
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
@@ -83,14 +86,30 @@ export default function Productos() {
     } catch { showToast('error', 'Error de conexión') }
     setSaving(false)
   }
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const res = await uploadFile(file)
+      if (res.success) {
+        setActForm(prev => ({ ...prev, imagen_url: res.data.url }))
+      }
+    } catch { }
+    setUploading(false)
+  }
   const toggleActivo = async (a: Actividad) => {
     await updateActividad(a.id, { activa: a.activa ? 0 : 1 })
     fetchAll()
   }
   const doDeleteAct = async (id: number) => {
-    const res = await deleteActividad(id)
-    if (res.success) { showToast('success', 'Actividad eliminada'); fetchAll() }
-    else showToast('error', res.error?.message || 'Error')
+    try {
+      const res = await deleteActividad(id)
+      if (res.success) { showToast('success', 'Actividad eliminada'); fetchAll() }
+      else showToast('error', res.error?.message || 'Error al eliminar')
+    } catch (err: any) {
+      showToast('error', err.response?.data?.error?.message || 'Error al eliminar actividad')
+    }
     setConfirmDelete(null)
   }
 
@@ -117,9 +136,13 @@ export default function Productos() {
     fetchAll()
   }
   const doDeleteProp = async (id: number) => {
-    const res = await deletePropiedad(id)
-    if (res.success) { showToast('success', 'Propiedad eliminada'); fetchAll() }
-    else showToast('error', res.error?.message || 'Error')
+    try {
+      const res = await deletePropiedad(id)
+      if (res.success) { showToast('success', 'Propiedad eliminada'); fetchAll() }
+      else showToast('error', res.error?.message || 'Error al eliminar')
+    } catch (err: any) {
+      showToast('error', err.response?.data?.error?.message || 'Error al eliminar propiedad')
+    }
     setConfirmDelete(null)
   }
 
@@ -218,7 +241,16 @@ export default function Productos() {
                     ${act.activa ? 'border-gray-200' : 'border-red-200 opacity-60'}`}>
                     <div className="p-4">
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-semibold text-azul-900 leading-tight">{act.nombre}</h3>
+                        <div className="flex items-center gap-2.5">
+                          {act.imagen_url ? (
+                            <img src={act.imagen_url} alt={act.nombre} className="w-10 h-10 rounded-lg object-cover shadow-sm ring-1 ring-gray-200" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                              <ImageIcon className="w-5 h-5 text-gray-300" />
+                            </div>
+                          )}
+                          <h3 className="font-semibold text-azul-900 leading-tight">{act.nombre}</h3>
+                        </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button onClick={() => toggleActivo(act)} title={act.activa ? 'Desactivar' : 'Activar'}>
                             {act.activa ? <ToggleRight className="w-5 h-5 text-green-500" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
@@ -369,6 +401,26 @@ export default function Productos() {
                   <Input label="Qué llevar" value={actForm.que_llevar || ''} onChange={v => setActForm({ ...actForm, que_llevar: v })} placeholder="Bloqueador, Toalla" />
                   <Input label="Requisitos" value={actForm.requisitos || ''} onChange={v => setActForm({ ...actForm, requisitos: v })} placeholder="Saber nadar" />
                   <NumberInput label="Capacidad Máx." value={actForm.capacidad_max} onChange={v => setActForm({ ...actForm, capacidad_max: v })} integer />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Imagen del Producto</label>
+                    <div className="flex items-center gap-3">
+                      {actForm.imagen_url ? (
+                        <img src={actForm.imagen_url} alt="" className="w-16 h-16 rounded-lg object-cover shadow-sm ring-1 ring-gray-200" />
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <ImageIcon className="w-6 h-6 text-gray-300" />
+                        </div>
+                      )}
+                      <label className="cursor-pointer px-3 py-2 bg-turquoise-50 text-turquoise-700 border border-turquoise-200 rounded-lg text-sm font-medium hover:bg-turquoise-100 transition-colors flex items-center gap-1.5">
+                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                        {uploading ? 'Subiendo...' : 'Subir Foto'}
+                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                      </label>
+                      {actForm.imagen_url && (
+                        <button onClick={() => setActForm({ ...actForm, imagen_url: '' })} className="text-xs text-red-500 hover:underline">Quitar</button>
+                      )}
+                    </div>
+                  </div>
                 </>
               ) : (
                 <>
