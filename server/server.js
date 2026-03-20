@@ -5,6 +5,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { getDb, findAll, findById, create, update, remove } = require('./db/database');
 const { verifyPassword, generateToken, requireAuth, requireRole, isPartner } = require('./auth');
+const notifications = require('./notifications');
 
 // ── Multer config for file uploads ──
 const uploadsDir = path.join(__dirname, '../uploads');
@@ -384,6 +385,16 @@ app.post('/api/v1/tours', requireAuth, (req, res) => {
     }
 
     success(res, tour, null, 201);
+
+    // Send notifications asynchronously (don't block response)
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...data, ...tour, email: data.email_cliente };
+        await notifications.onTourCreated(fullTour);
+      } catch (err) {
+        console.error('🔔 Notification error (tour create):', err.message);
+      }
+    });
   } catch (err) {
     console.error('Error creating tour:', err);
     error(res, 'SERVER_ERROR', 'Error creating tour', 500);
@@ -955,6 +966,16 @@ app.post('/api/v1/tours/:id/aprobar', requireAuth, requireRole('admin'), (req, r
     );
 
     success(res, updated);
+
+    // Send notifications asynchronously
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...tour, ...updated, email: tour.email_cliente };
+        await notifications.onTourApproved(fullTour);
+      } catch (err) {
+        console.error('🔔 Notification error (tour approve):', err.message);
+      }
+    });
   } catch (err) {
     console.error('Error approving tour:', err);
     error(res, 'SERVER_ERROR', 'Error al aprobar tour', 500);
@@ -1763,7 +1784,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Mahana Portal v2 running on port ${PORT}`);
   console.log(`📡 API: http://localhost:${PORT}/api/v1/api-status`);
 
@@ -1784,4 +1805,46 @@ app.listen(PORT, () => {
   } catch (err) {
     console.error('❌ FATAL: Failed to seed users:', err);
   }
+
+  // Verify email notification channel
+  try {
+    const status = await notifications.verifyAll();
+    console.log('🔔 Notification channels:', JSON.stringify(status));
+  } catch (err) {
+    console.error('🔔 Error verifying notifications:', err.message);
+  }
+
+  // ── Daily Scheduler ──
+  // Runs reminders at 6pm and summary at 7am (Panama time UTC-5)
+  const NOTIFY_EMAIL_TEAM = process.env.NOTIFY_EMAIL_TEAM || '';
+  
+  function scheduleDailyJobs() {
+    const now = new Date();
+    // Panama is UTC-5
+    const panamaHour = (now.getUTCHours() - 5 + 24) % 24;
+    const panamaMinute = now.getUTCMinutes();
+    
+    // Check at 7:00am Panama = reminder for tomorrow tours sent at 6pm, summary at 7am
+    if (panamaHour === 7 && panamaMinute < 5) {
+      console.log('🔔 Running daily summary...');
+      if (NOTIFY_EMAIL_TEAM) {
+        const db = getDb();
+        notifications.sendDailySummary(db, NOTIFY_EMAIL_TEAM).catch(err => {
+          console.error('🔔 Daily summary error:', err.message);
+        });
+      }
+    }
+    
+    if (panamaHour === 18 && panamaMinute < 5) {
+      console.log('🔔 Running daily reminders...');
+      const db = getDb();
+      notifications.sendDailyReminders(db).catch(err => {
+        console.error('🔔 Reminders error:', err.message);
+      });
+    }
+  }
+  
+  // Check every 5 minutes
+  setInterval(scheduleDailyJobs, 5 * 60 * 1000);
+  console.log('⏰ Daily scheduler active (reminders @ 6pm, summary @ 7am Panama)');
 });
