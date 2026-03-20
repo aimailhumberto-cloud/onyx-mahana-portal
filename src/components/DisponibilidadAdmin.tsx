@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getActividades, getDisponibilidad, createSlot, updateSlot, deleteSlot, getPlantillas, createPlantilla, generarSlotsMes } from '../api/api'
+import { getActividades, getDisponibilidad, createSlot, updateSlot, deleteSlot, getPlantillas, createPlantilla, updatePlantilla, deletePlantilla, generarSlotsMes } from '../api/api'
 import type { Actividad, Slot, Plantilla } from '../api/api'
 import { Loader2, Plus, Trash2, Lock, Unlock, Calendar, Clock, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle, Edit3, X, Save, Info } from 'lucide-react'
 
@@ -169,8 +169,31 @@ export default function DisponibilidadAdmin() {
 
   const handleDeletePlantilla = async (id: number) => {
     if (!confirm('¿Eliminar esta plantilla?')) return
-    // We don't have a deletePlantilla API yet, so we'll just alert
-    setResult({ type: 'error', message: 'Función de eliminar plantilla en desarrollo' })
+    try {
+      const res = await deletePlantilla(id)
+      if (res.success) {
+        setResult({ type: 'success', message: '✅ Plantilla eliminada' })
+        loadData()
+      } else {
+        setResult({ type: 'error', message: res.error?.message || 'Error al eliminar' })
+      }
+    } catch { setResult({ type: 'error', message: 'Error de conexión' }) }
+  }
+
+  const handleSavePlantilla = async (plantillaId: number) => {
+    try {
+      const res = await updatePlantilla(plantillaId, {
+        hora: editPlantillaData.hora,
+        capacidad: parseInt(editPlantillaData.capacidad) || 6,
+      } as any)
+      if (res.success) {
+        setEditingPlantillaId(null)
+        setResult({ type: 'success', message: '✅ Plantilla actualizada' })
+        loadData()
+      } else {
+        setResult({ type: 'error', message: res.error?.message || 'Error al actualizar' })
+      }
+    } catch { setResult({ type: 'error', message: 'Error de conexión' }) }
   }
 
   const handleGenerate = async () => {
@@ -537,7 +560,8 @@ export default function DisponibilidadAdmin() {
                                               onChange={e => setEditPlantillaData(prev => ({ ...prev, capacidad: e.target.value }))}
                                               className="w-full px-0.5 py-0 border border-gray-200 rounded text-[10px]" />
                                             <div className="flex gap-0.5 mt-0.5 justify-center">
-                                              <button onClick={() => setEditingPlantillaId(null)} className="p-0.5 text-gray-400 hover:text-gray-600"><X className="w-3 h-3" /></button>
+                                              <button onClick={() => handleSavePlantilla(pl.id)} className="p-0.5 text-green-500 hover:text-green-700" title="Guardar"><Save className="w-3 h-3" /></button>
+                                              <button onClick={() => setEditingPlantillaId(null)} className="p-0.5 text-gray-400 hover:text-gray-600" title="Cancelar"><X className="w-3 h-3" /></button>
                                             </div>
                                           </div>
                                         )

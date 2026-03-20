@@ -1647,6 +1647,40 @@ app.post('/api/v1/plantillas', requireAuth, requireRole('admin'), (req, res) => 
   }
 });
 
+// Update plantilla
+app.put('/api/v1/plantillas/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const existing = findById('plantillas_horario', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', 'Plantilla no encontrada', 404);
+
+    const data = {};
+    if (req.body.hora !== undefined) data.hora = req.body.hora;
+    if (req.body.capacidad !== undefined) data.capacidad = parseInt(req.body.capacidad) || 6;
+    if (req.body.dia_semana !== undefined) data.dia_semana = parseInt(req.body.dia_semana);
+    if (req.body.activa !== undefined) data.activa = req.body.activa ? 1 : 0;
+
+    const updated = update('plantillas_horario', req.params.id, data);
+    success(res, updated);
+  } catch (err) {
+    console.error('Error updating plantilla:', err);
+    error(res, 'SERVER_ERROR', 'Error updating plantilla', 500);
+  }
+});
+
+// Delete plantilla
+app.delete('/api/v1/plantillas/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const existing = findById('plantillas_horario', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', 'Plantilla no encontrada', 404);
+
+    const removed = remove('plantillas_horario', req.params.id);
+    success(res, removed);
+  } catch (err) {
+    console.error('Error deleting plantilla:', err);
+    error(res, 'SERVER_ERROR', 'Error deleting plantilla', 500);
+  }
+});
+
 // Generate slots for a month from plantillas
 app.post('/api/v1/plantillas/generar', requireAuth, requireRole('admin'), (req, res) => {
   try {

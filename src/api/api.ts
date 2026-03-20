@@ -454,6 +454,16 @@ export async function createPlantilla(data: Partial<Plantilla>): Promise<ApiResp
   return response.data
 }
 
+export async function updatePlantilla(id: number, data: Partial<Plantilla>): Promise<ApiResponse<Plantilla>> {
+  const response = await api.put(`/plantillas/${id}`, data)
+  return response.data
+}
+
+export async function deletePlantilla(id: number): Promise<ApiResponse<{ deleted: boolean }>> {
+  const response = await api.delete(`/plantillas/${id}`)
+  return response.data
+}
+
 export async function generarSlotsMes(data: { mes: string; actividad_id?: number }): Promise<ApiResponse<{ created: number }>> {
   const response = await api.post('/plantillas/generar', data)
   return response.data
