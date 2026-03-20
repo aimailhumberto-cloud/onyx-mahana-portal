@@ -1,10 +1,11 @@
 /**
  * Notification Orchestrator — Mahana Tours
- * Centralizes all notification channels (Email, WhatsApp, Telegram)
+ * Centralizes all 3 notification channels: Email, WhatsApp, Telegram
  * Each channel has its own try/catch — if one fails, others still send.
  */
 const email = require('./email');
 const whatsapp = require('./whatsapp');
+const telegram = require('./telegram');
 
 // ── Initialize channels ──
 
@@ -29,17 +30,22 @@ async function onTourCreated(tour) {
   // WhatsApp to team/owner
   try {
     if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
-      const msg = whatsapp.formatNewTour(tour);
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, msg);
+      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatNewTour(tour));
     }
   } catch (err) {
     console.error('🔔 Notification error (whatsapp/create):', err.message);
     results.whatsapp = { success: false, error: err.message };
   }
 
-  // TODO: Telegram to agent
+  // Telegram to group/agent
+  try {
+    results.telegram = await telegram.sendTelegram(null, telegram.formatNewTour(tour));
+  } catch (err) {
+    console.error('🔔 Notification error (telegram/create):', err.message);
+    results.telegram = { success: false, error: err.message };
+  }
 
-  console.log(`🔔 Notifications sent for tour #${tour.id}:`, JSON.stringify(results));
+  console.log(`🔔 Notifications for tour #${tour.id}:`, JSON.stringify(results));
   return results;
 }
 
@@ -57,17 +63,22 @@ async function onTourApproved(tour) {
   // WhatsApp to team/owner
   try {
     if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
-      const msg = whatsapp.formatApprovedTour(tour);
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, msg);
+      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatApprovedTour(tour));
     }
   } catch (err) {
     console.error('🔔 Notification error (whatsapp/approve):', err.message);
     results.whatsapp = { success: false, error: err.message };
   }
 
-  // TODO: Telegram to agent
+  // Telegram to group/agent
+  try {
+    results.telegram = await telegram.sendTelegram(null, telegram.formatApprovedTour(tour));
+  } catch (err) {
+    console.error('🔔 Notification error (telegram/approve):', err.message);
+    results.telegram = { success: false, error: err.message };
+  }
 
-  console.log(`🔔 Notifications sent for approved tour #${tour.id}:`, JSON.stringify(results));
+  console.log(`🔔 Notifications for approved tour #${tour.id}:`, JSON.stringify(results));
   return results;
 }
 
@@ -97,13 +108,19 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
     results.whatsapp = { success: false, error: err.message };
   }
 
+  // Telegram status change
+  try {
+    results.telegram = await telegram.sendTelegram(null, telegram.formatStatusChange(tour, oldStatus, newStatus));
+  } catch (err) {
+    results.telegram = { success: false, error: err.message };
+  }
+
   return results;
 }
 
 // ── Scheduled Notifications ──
 
 async function sendDailyReminders(db) {
-  // Find tours for tomorrow with email or whatsapp
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toISOString().split('T')[0];
@@ -133,8 +150,7 @@ async function sendDailyReminders(db) {
       // WhatsApp reminder to client
       if (tour.whatsapp) {
         try {
-          const msg = whatsapp.formatReminder(tour);
-          const result = await whatsapp.sendWhatsApp(tour.whatsapp, msg);
+          const result = await whatsapp.sendWhatsApp(tour.whatsapp, whatsapp.formatReminder(tour));
           if (result.success) waSent++;
         } catch (err) {
           console.error(`🔔 WA reminder failed for tour #${tour.id}:`, err.message);
@@ -142,7 +158,7 @@ async function sendDailyReminders(db) {
       }
     }
     
-    console.log(`🔔 Reminders complete: ${emailSent} emails, ${waSent} WhatsApp out of ${tours.length} tours`);
+    console.log(`🔔 Reminders: ${emailSent} emails, ${waSent} WhatsApp / ${tours.length} tours`);
     return { total: tours.length, emailSent, waSent };
   } catch (err) {
     console.error('🔔 Error sending reminders:', err.message);
@@ -176,11 +192,17 @@ async function sendDailySummary(db, toEmail) {
     // WhatsApp summary
     if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
       try {
-        const msg = whatsapp.formatDailySummary(summaryData);
-        results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, msg);
+        results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatDailySummary(summaryData));
       } catch (err) {
         results.whatsapp = { success: false, error: err.message };
       }
+    }
+
+    // Telegram summary
+    try {
+      results.telegram = await telegram.sendTelegram(null, telegram.formatDailySummary(summaryData));
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
     }
 
     console.log(`🔔 Daily summary: ${tours.length} tours, $${totalIngresos}`);
@@ -197,7 +219,7 @@ async function verifyAll() {
   const results = {};
   results.email = await email.verifyConnection();
   results.whatsapp = whatsapp.getStatus();
-  // TODO: results.telegram
+  results.telegram = telegram.getStatus();
   return results;
 }
 
