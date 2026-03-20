@@ -10,7 +10,8 @@ import {
   Menu,
   X,
   LogOut,
-  Clock
+  Clock,
+  Bell
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -21,6 +22,7 @@ const navigation = [
   { name: 'Calendario', href: '/calendario', icon: CalendarDays },
   { name: 'Productos', href: '/productos', icon: Package },
   { name: 'Disponibilidad', href: '/disponibilidad', icon: Clock },
+  { name: 'Notificaciones', href: '/notificaciones', icon: Bell },
   { name: 'Admin', href: '/admin', icon: Settings },
 ]
 

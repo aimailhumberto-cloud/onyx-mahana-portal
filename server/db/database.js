@@ -164,6 +164,33 @@ function getDb() {
 
     // User seeding is now handled at server startup in server.js
 
+    // ── Notification config table ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS configuracion_notificaciones (
+        clave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL DEFAULT '',
+        descripcion TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Seed defaults if empty
+    const configCount = db.prepare('SELECT COUNT(*) as c FROM configuracion_notificaciones').get();
+    if (configCount.c === 0) {
+      const insertConfig = db.prepare('INSERT INTO configuracion_notificaciones (clave, valor, descripcion) VALUES (?, ?, ?)');
+      insertConfig.run('email_cc_default', '', 'CC automático en emails al cliente');
+      insertConfig.run('email_team', '', 'Emails del equipo para resumen diario (separados por coma)');
+      insertConfig.run('email_caracol', '', 'Email de Caracol para copias de estadías');
+      insertConfig.run('whatsapp_notify', '', 'Número WhatsApp para alertas del equipo');
+      insertConfig.run('whatsapp_caracol', '', 'Número WhatsApp de Caracol');
+      insertConfig.run('telegram_chat_id', '', 'Chat ID de Telegram (grupo o personal)');
+      insertConfig.run('politica_cancelacion', 'Las cancelaciones deben realizarse con al menos 24 horas de anticipación. Cancelaciones tardías están sujetas a un cargo del 50%.', 'Política de cancelación para emails');
+      insertConfig.run('email_enabled', 'true', 'Habilitar notificaciones por email');
+      insertConfig.run('whatsapp_enabled', 'false', 'Habilitar notificaciones por WhatsApp');
+      insertConfig.run('telegram_enabled', 'true', 'Habilitar notificaciones por Telegram');
+      console.log('✅ Notification config seeded');
+    }
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;
@@ -171,7 +198,7 @@ function getDb() {
 
 // ── Table whitelist (prevents SQL injection via table names) ──
 
-const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas'];
+const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones'];
 
 function validateTable(table) {
   if (!VALID_TABLES.includes(table)) {

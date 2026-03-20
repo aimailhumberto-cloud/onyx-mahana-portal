@@ -1045,6 +1045,55 @@ app.post('/api/v1/tours/:id/rechazar', requireAuth, requireRole('admin'), (req, 
 });
 
 // ══════════════════════════════════════
+// NOTIFICATION CONFIG
+// ══════════════════════════════════════
+
+app.get('/api/v1/config/notificaciones', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const rows = db.prepare('SELECT clave, valor, descripcion FROM configuracion_notificaciones ORDER BY clave').all();
+    const config = {};
+    rows.forEach(r => { config[r.clave] = { valor: r.valor, descripcion: r.descripcion }; });
+    success(res, config);
+  } catch (err) {
+    console.error('Error reading notification config:', err);
+    error(res, 'SERVER_ERROR', 'Error reading config', 500);
+  }
+});
+
+app.put('/api/v1/config/notificaciones', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const updates = req.body;
+    if (!updates || typeof updates !== 'object') {
+      return error(res, 'VALIDATION_ERROR', 'Body must be an object of key-value pairs', 400);
+    }
+
+    const upsert = db.prepare(`
+      INSERT INTO configuracion_notificaciones (clave, valor, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(clave) DO UPDATE SET valor = excluded.valor, updated_at = excluded.updated_at
+    `);
+
+    const transaction = db.transaction((entries) => {
+      for (const [key, value] of entries) {
+        upsert.run(key, String(value));
+      }
+    });
+
+    transaction(Object.entries(updates));
+
+    // Re-read all config
+    const rows = db.prepare('SELECT clave, valor, descripcion FROM configuracion_notificaciones ORDER BY clave').all();
+    const config = {};
+    rows.forEach(r => { config[r.clave] = { valor: r.valor, descripcion: r.descripcion }; });
+    success(res, config);
+  } catch (err) {
+    console.error('Error updating notification config:', err);
+    error(res, 'SERVER_ERROR', 'Error updating config', 500);
+  }
+});
+
+// ══════════════════════════════════════
 // ALERTAS — AI Agent Monitoring
 // ══════════════════════════════════════
 

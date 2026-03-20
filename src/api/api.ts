@@ -588,3 +588,20 @@ export async function marcarAlertaLeida(id: number): Promise<ApiResponse<Alerta>
   const response = await api.patch(`/alertas/${id}`)
   return response.data
 }
+
+// ── Notification Config ──
+
+export async function getNotificationConfig(): Promise<ApiResponse<Record<string, { valor: string; descripcion: string }>>> {
+  try {
+    const response = await api.get('/config/notificaciones')
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: {}, error: { code: 'NETWORK', message: 'Error' } }
+  }
+}
+
+export async function updateNotificationConfig(config: Record<string, string>): Promise<ApiResponse<Record<string, { valor: string; descripcion: string }>>> {
+  const response = await api.put('/config/notificaciones', config)
+  return response.data
+}
