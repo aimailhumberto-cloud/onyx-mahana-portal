@@ -296,7 +296,7 @@ export default function ToursList() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {t.fuente === 'partner-portal' ? (
+                        {t.fuente === 'partner-portal' || (t.vendedor && t.vendedor !== 'Mahana Tours') ? (
                           <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-50 text-orange-700 border border-orange-200 font-medium">
                             <Building2 className="w-3 h-3" /> {t.vendedor || 'Partner'}
                           </span>
@@ -439,7 +439,7 @@ export default function ToursList() {
                       <span className="font-semibold text-green-600">{fmt(t.precio_ingreso || 0)}</span>
                       <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">→ {fmt(t.ganancia_mahana || 0)}</span>
                   {t.fuente === 'openclaw' && <Bot className="w-3 h-3 text-purple-400" />}
-                      {t.fuente === 'partner-portal' && <span className="text-[9px] text-orange-500 font-medium">Partner</span>}
+                      {(t.fuente === 'partner-portal' || (t.vendedor && t.vendedor !== 'Mahana Tours')) && <span className="text-[9px] text-orange-500 font-medium">{t.vendedor || 'Partner'}</span>}
                     </div>
                   </div>
                   {t.estatus === 'Por Aprobar' && (
