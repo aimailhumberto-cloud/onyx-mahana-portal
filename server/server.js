@@ -1814,6 +1814,13 @@ app.listen(PORT, async () => {
     console.error('🔔 Error verifying notifications:', err.message);
   }
 
+  // Initialize WhatsApp (will show QR code if needed)
+  try {
+    await notifications.initialize();
+  } catch (err) {
+    console.error('🔔 WhatsApp init error:', err.message);
+  }
+
   // ── Daily Scheduler ──
   // Runs reminders at 6pm and summary at 7am (Panama time UTC-5)
   const NOTIFY_EMAIL_TEAM = process.env.NOTIFY_EMAIL_TEAM || '';
