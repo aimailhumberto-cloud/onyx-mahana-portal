@@ -6,6 +6,22 @@
 const email = require('./email');
 const whatsapp = require('./whatsapp');
 const telegram = require('./telegram');
+const { getDb } = require('../db/database');
+
+// Read config from DB with env var fallback
+function getConfig(key, envFallback) {
+  try {
+    const db = getDb();
+    const row = db.prepare('SELECT valor FROM configuracion_notificaciones WHERE clave = ?').get(key);
+    if (row && row.valor) return row.valor;
+  } catch {}
+  return envFallback || '';
+}
+
+function isEnabled(channel) {
+  const val = getConfig(`${channel}_enabled`, process.env[`${channel.toUpperCase()}_ENABLED`]);
+  return val === 'true' || val === '1';
+}
 
 // ── Initialize channels ──
 

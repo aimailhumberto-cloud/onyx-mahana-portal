@@ -222,7 +222,7 @@ function resumenDiarioTemplate(data) {
 
 // ── Send Functions ──
 
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, cc = null) {
   const t = getTransporter();
   if (!t) {
     console.warn('📧 Email not configured (missing SMTP_PASS). Skipping email to', to);
@@ -230,13 +230,16 @@ async function sendEmail(to, subject, html) {
   }
 
   try {
-    const info = await t.sendMail({
+    const mailOptions = {
       from: SMTP_FROM,
       to,
       subject,
       html,
-    });
-    console.log(`📧 Email sent to ${to}: ${info.messageId}`);
+    };
+    if (cc) mailOptions.cc = cc;
+
+    const info = await t.sendMail(mailOptions);
+    console.log(`📧 Email sent to ${to}${cc ? ` (CC: ${cc})` : ''}: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (err) {
     console.error(`📧 Email failed to ${to}:`, err.message);
