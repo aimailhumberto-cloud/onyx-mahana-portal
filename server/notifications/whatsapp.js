@@ -193,6 +193,33 @@ function formatDailySummary(data) {
   return lines.join('\n');
 }
 
+// ── Estadía Messages ──
+
+function formatNewEstadia(estadia) {
+  return [
+    `🏨 *Nueva Estadía*`,
+    ``,
+    `🏠 *${estadia.propiedad || 'Propiedad'}*`,
+    `👤 Cliente: ${estadia.cliente || '—'}`,
+    `📅 Check-in: ${estadia.check_in || '—'}`,
+    `📅 Check-out: ${estadia.check_out || '—'}`,
+    `👥 Huéspedes: ${estadia.huespedes || '—'}`,
+    estadia.precio_final ? `💰 Precio: $${estadia.precio_final}` : '',
+    estadia.estado ? `📊 Estado: ${estadia.estado}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function formatEstadiaStatus(estadia, oldStatus, newStatus) {
+  const emoji = { 'Cotizada': '💬', 'Confirmada': '✅', 'Pagada': '💰', 'Perdida': '❌' };
+  return [
+    `${emoji[newStatus] || '🔄'} *Estadía ${newStatus}*`,
+    ``,
+    `🏠 ${estadia.propiedad || '—'}`,
+    `👤 ${estadia.cliente || '—'}`,
+    `📅 ${estadia.check_in || '—'} → ${estadia.check_out || '—'}`,
+  ].join('\n');
+}
+
 function getStatus() {
   return {
     enabled: WHATSAPP_ENABLED,
@@ -210,6 +237,8 @@ module.exports = {
   formatApprovedTour,
   formatReminder,
   formatDailySummary,
+  formatNewEstadia,
+  formatEstadiaStatus,
   getStatus,
   WHATSAPP_NOTIFY_NUMBER,
 };

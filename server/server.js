@@ -514,6 +514,15 @@ app.post('/api/v1/estadias', requireApiKey, (req, res) => {
 
     const estadia = create('reservas_estadias', data);
     success(res, estadia, null, 201);
+
+    // Send notifications asynchronously
+    setImmediate(async () => {
+      try {
+        await notifications.onEstadiaCreated({ ...data, ...estadia });
+      } catch (err) {
+        console.error('🔔 Notification error (estadia create):', err.message);
+      }
+    });
   } catch (err) {
     console.error('Error creating estadia:', err);
     error(res, 'SERVER_ERROR', 'Error creating estadia', 500);
@@ -539,6 +548,17 @@ app.put('/api/v1/estadias/:id', requireApiKey, (req, res) => {
 
     const updated = update('reservas_estadias', req.params.id, data);
     success(res, updated);
+
+    // Notify on status change
+    if (data.estado && data.estado !== existing.estado) {
+      setImmediate(async () => {
+        try {
+          await notifications.onEstadiaStatusChanged({ ...existing, ...updated }, existing.estado, data.estado);
+        } catch (err) {
+          console.error('🔔 Notification error (estadia update):', err.message);
+        }
+      });
+    }
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error updating estadia', 500);
   }
@@ -557,8 +577,18 @@ app.patch('/api/v1/estadias/:id/status', requireApiKey, (req, res) => {
     const existing = findById('reservas_estadias', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', `Estadia ${req.params.id} not found`, 404);
 
+    const oldStatus = existing.estado;
     const updated = update('reservas_estadias', req.params.id, { estado });
     success(res, updated);
+
+    // Notify on status change
+    setImmediate(async () => {
+      try {
+        await notifications.onEstadiaStatusChanged({ ...existing, ...updated }, oldStatus, estado);
+      } catch (err) {
+        console.error('🔔 Notification error (estadia status):', err.message);
+      }
+    });
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error updating status', 500);
   }

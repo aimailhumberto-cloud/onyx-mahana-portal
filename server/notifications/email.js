@@ -266,6 +266,75 @@ async function sendResumenDiario(toEmail, data) {
   return sendEmail(toEmail, subject, resumenDiarioTemplate(data));
 }
 
+// ── Estadía Templates ──
+
+function estadiaConfirmacionTemplate(estadia) {
+  const cliente = estadia.cliente || '';
+  const propiedad = estadia.propiedad || 'Propiedad';
+  const checkIn = estadia.check_in || 'Por confirmar';
+  const checkOut = estadia.check_out || '';
+  const huespedes = estadia.huespedes || '—';
+  const precio = estadia.precio_final || 0;
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #4a1d8e 0%, #7c3aed 100%);">
+      <h1>🏨 Mahana Stays</h1>
+      <p>Hospedaje en Panamá</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #4a1d8e; margin-top: 0;">¡Estadía Confirmada! ✅</h2>
+      <p style="color: #6b7280;">Hola <strong>${cliente}</strong>, tu estadía ha sido confirmada:</p>
+      
+      <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div class="detail-row">
+          <span class="detail-label">🏠 Propiedad</span>
+          <span class="detail-value">${propiedad}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">📅 Check-in</span>
+          <span class="detail-value">${checkIn}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">📅 Check-out</span>
+          <span class="detail-value">${checkOut}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">👥 Huéspedes</span>
+          <span class="detail-value">${huespedes}</span>
+        </div>
+      </div>
+
+      ${precio > 0 ? `<div class="highlight-box">
+        <div class="amount">$${precio}</div>
+        <div class="label">Total</div>
+      </div>` : ''}
+
+      <p style="color: #6b7280; font-size: 13px;">
+        ¿Preguntas? WhatsApp: <strong>+507 6290-6800</strong>
+      </p>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours & Stays — Panamá 🇵🇦</p>
+    </div>
+  `, 'Estadía Confirmada — Mahana');
+}
+
+async function sendEstadiaConfirmacion(estadia) {
+  const email = estadia.email;
+  if (!email) return { success: false, reason: 'no_email' };
+  const subject = `✅ Estadía Confirmada — ${estadia.propiedad || 'Hospedaje'} | Mahana`;
+  return sendEmail(email, subject, estadiaConfirmacionTemplate(estadia));
+}
+
+async function sendEstadiaStatusChange(estadia, newStatus) {
+  const email = estadia.email;
+  if (!email) return { success: false, reason: 'no_email' };
+  const statusEmoji = { 'Cotizada': '💬', 'Confirmada': '✅', 'Pagada': '💰', 'Perdida': '❌' };
+  const emoji = statusEmoji[newStatus] || '🔄';
+  const subject = `${emoji} ${newStatus} — ${estadia.propiedad || 'Estadía'} | Mahana`;
+  return sendEmail(email, subject, estadiaConfirmacionTemplate({ ...estadia, estado: newStatus }));
+}
+
 // ── Verify SMTP connection ──
 
 async function verifyConnection() {
@@ -286,8 +355,11 @@ module.exports = {
   sendConfirmacion,
   sendRecordatorio,
   sendResumenDiario,
+  sendEstadiaConfirmacion,
+  sendEstadiaStatusChange,
   verifyConnection,
   confirmacionTemplate,
   recordatorioTemplate,
   resumenDiarioTemplate,
+  estadiaConfirmacionTemplate,
 };

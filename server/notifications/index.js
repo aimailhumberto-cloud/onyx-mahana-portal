@@ -117,6 +117,69 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
 
   return results;
 }
+// ── Estadía Events ──
+
+async function onEstadiaCreated(estadia) {
+  const results = {};
+
+  // Email to client
+  try {
+    results.email = await email.sendEstadiaConfirmacion(estadia);
+  } catch (err) {
+    results.email = { success: false, error: err.message };
+  }
+
+  // WhatsApp to team
+  try {
+    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
+      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatNewEstadia(estadia));
+    }
+  } catch (err) {
+    results.whatsapp = { success: false, error: err.message };
+  }
+
+  // Telegram
+  try {
+    results.telegram = await telegram.sendTelegram(null, telegram.formatNewEstadia(estadia));
+  } catch (err) {
+    results.telegram = { success: false, error: err.message };
+  }
+
+  console.log(`🔔 Notifications for estadía #${estadia.id}:`, JSON.stringify(results));
+  return results;
+}
+
+async function onEstadiaStatusChanged(estadia, oldStatus, newStatus) {
+  const results = {};
+
+  // Email on Confirmada or Pagada
+  if (['Confirmada', 'Pagada'].includes(newStatus) && estadia.email) {
+    try {
+      results.email = await email.sendEstadiaStatusChange(estadia, newStatus);
+    } catch (err) {
+      results.email = { success: false, error: err.message };
+    }
+  }
+
+  // WhatsApp to team
+  try {
+    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
+      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatEstadiaStatus(estadia, oldStatus, newStatus));
+    }
+  } catch (err) {
+    results.whatsapp = { success: false, error: err.message };
+  }
+
+  // Telegram
+  try {
+    results.telegram = await telegram.sendTelegram(null, telegram.formatEstadiaStatus(estadia, oldStatus, newStatus));
+  } catch (err) {
+    results.telegram = { success: false, error: err.message };
+  }
+
+  console.log(`🔔 Estadía #${estadia.id} ${oldStatus} → ${newStatus}:`, JSON.stringify(results));
+  return results;
+}
 
 // ── Scheduled Notifications ──
 
@@ -228,6 +291,8 @@ module.exports = {
   onTourCreated,
   onTourApproved,
   onTourStatusChanged,
+  onEstadiaCreated,
+  onEstadiaStatusChanged,
   sendDailyReminders,
   sendDailySummary,
   verifyAll,

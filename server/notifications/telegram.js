@@ -96,6 +96,30 @@ function formatDailySummary(data) {
   return lines.join('\n');
 }
 
+// ── Estadía Messages ──
+
+function formatNewEstadia(estadia) {
+  return [
+    `🏨 *Nueva Estadía*`,
+    ``,
+    `🏠 *${escape(estadia.propiedad || 'Propiedad')}*`,
+    `👤 Cliente: ${escape(estadia.cliente || '—')}`,
+    `📅 Check\\-in: ${escape(estadia.check_in || '—')}`,
+    `📅 Check\\-out: ${escape(estadia.check_out || '—')}`,
+    `👥 Huéspedes: ${estadia.huespedes || '—'}`,
+    estadia.precio_final ? `💰 Precio: $${estadia.precio_final}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function formatEstadiaStatus(estadia, oldStatus, newStatus) {
+  const emoji = { 'Cotizada': '💬', 'Confirmada': '✅', 'Pagada': '💰', 'Perdida': '❌' };
+  return [
+    `${emoji[newStatus] || '🔄'} *Estadía ${escape(newStatus)}*`,
+    `🏠 ${escape(estadia.propiedad || '—')}`,
+    `👤 ${escape(estadia.cliente || '—')}`,
+  ].join('\n');
+}
+
 // Escape special Markdown characters
 function escape(text) {
   if (!text) return '';
@@ -129,6 +153,8 @@ module.exports = {
   formatApprovedTour,
   formatStatusChange,
   formatDailySummary,
+  formatNewEstadia,
+  formatEstadiaStatus,
   getUpdates,
   getStatus,
   TELEGRAM_CHAT_ID,
