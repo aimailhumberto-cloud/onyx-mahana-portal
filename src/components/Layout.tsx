@@ -11,7 +11,8 @@ import {
   X,
   LogOut,
   Clock,
-  Bell
+  Bell,
+  Users
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Productos', href: '/productos', icon: Package },
   { name: 'Disponibilidad', href: '/disponibilidad', icon: Clock },
   { name: 'Notificaciones', href: '/notificaciones', icon: Bell },
+  { name: 'Usuarios', href: '/usuarios', icon: Users },
   { name: 'Admin', href: '/admin', icon: Settings },
 ]
 

@@ -16,6 +16,7 @@ import PartnerTourRequest from './components/partner/PartnerTourRequest'
 import PartnerReservations from './components/partner/PartnerReservations'
 import DisponibilidadAdmin from './components/DisponibilidadAdmin'
 import NotificacionesConfig from './components/NotificacionesConfig'
+import UsuariosAdmin from './components/UsuariosAdmin'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Loader2 } from 'lucide-react'
 
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="productos" element={<Productos />} />
         <Route path="disponibilidad" element={<DisponibilidadAdmin />} />
         <Route path="notificaciones" element={<NotificacionesConfig />} />
+        <Route path="usuarios" element={<UsuariosAdmin />} />
         <Route path="admin" element={<AdminPanel />} />
       </Route>
       <Route path="/login" element={<Navigate to="/" replace />} />

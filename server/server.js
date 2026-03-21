@@ -1086,6 +1086,135 @@ app.post('/api/v1/tours/:id/rechazar', requireAuth, requireRole('admin'), (req, 
 });
 
 // ══════════════════════════════════════
+// USER MANAGEMENT (admin only)
+// ══════════════════════════════════════
+
+app.get('/api/v1/usuarios', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const users = db.prepare('SELECT id, email, nombre, rol, vendedor, activo, created_at FROM usuarios ORDER BY id').all();
+    success(res, users);
+  } catch (err) {
+    console.error('Error listing users:', err);
+    error(res, 'SERVER_ERROR', 'Error listing users', 500);
+  }
+});
+
+app.post('/api/v1/usuarios', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const { email, password, nombre, rol, vendedor } = req.body;
+    if (!email || !password || !nombre || !rol) {
+      return error(res, 'VALIDATION_ERROR', 'Email, contraseña, nombre y rol son requeridos', 400);
+    }
+    if (!['admin', 'partner'].includes(rol)) {
+      return error(res, 'VALIDATION_ERROR', 'Rol debe ser "admin" o "partner"', 400);
+    }
+    if (password.length < 6) {
+      return error(res, 'VALIDATION_ERROR', 'La contraseña debe tener al menos 6 caracteres', 400);
+    }
+
+    const db = getDb();
+    const existing = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email.toLowerCase().trim());
+    if (existing) {
+      return error(res, 'DUPLICATE', 'Ya existe un usuario con ese email', 400);
+    }
+
+    const password_hash = hashPassword(password);
+    const result = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run(
+      email.toLowerCase().trim(), password_hash, sanitize(nombre), rol, vendedor ? sanitize(vendedor) : null
+    );
+
+    const user = db.prepare('SELECT id, email, nombre, rol, vendedor, activo, created_at FROM usuarios WHERE id = ?').get(result.lastInsertRowid);
+    success(res, user, 201);
+  } catch (err) {
+    console.error('Error creating user:', err);
+    error(res, 'SERVER_ERROR', 'Error creating user', 500);
+  }
+});
+
+app.put('/api/v1/usuarios/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.params.id);
+    if (!user) return error(res, 'NOT_FOUND', 'Usuario no encontrado', 404);
+
+    const { email, password, nombre, rol, vendedor } = req.body;
+    const updates = {};
+
+    if (email) updates.email = email.toLowerCase().trim();
+    if (nombre) updates.nombre = sanitize(nombre);
+    if (rol && ['admin', 'partner'].includes(rol)) updates.rol = rol;
+    if (vendedor !== undefined) updates.vendedor = vendedor ? sanitize(vendedor) : null;
+    if (password && password.length >= 6) updates.password_hash = hashPassword(password);
+
+    if (Object.keys(updates).length === 0) {
+      return error(res, 'VALIDATION_ERROR', 'No hay datos para actualizar', 400);
+    }
+
+    // Prevent changing own role from admin
+    if (req.user.id === user.id && updates.rol && updates.rol !== 'admin') {
+      return error(res, 'FORBIDDEN', 'No puedes cambiar tu propio rol', 403);
+    }
+
+    const fields = Object.keys(updates).map(f => `${f} = ?`).join(', ');
+    db.prepare(`UPDATE usuarios SET ${fields} WHERE id = ?`).run(...Object.values(updates), req.params.id);
+
+    const updated = db.prepare('SELECT id, email, nombre, rol, vendedor, activo, created_at FROM usuarios WHERE id = ?').get(req.params.id);
+    success(res, updated);
+  } catch (err) {
+    console.error('Error updating user:', err);
+    error(res, 'SERVER_ERROR', 'Error updating user', 500);
+  }
+});
+
+app.patch('/api/v1/usuarios/:id/toggle', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.params.id);
+    if (!user) return error(res, 'NOT_FOUND', 'Usuario no encontrado', 404);
+
+    // Prevent deactivating self
+    if (req.user.id === user.id) {
+      return error(res, 'FORBIDDEN', 'No puedes desactivar tu propia cuenta', 403);
+    }
+
+    const newStatus = user.activo ? 0 : 1;
+    db.prepare('UPDATE usuarios SET activo = ? WHERE id = ?').run(newStatus, req.params.id);
+
+    const updated = db.prepare('SELECT id, email, nombre, rol, vendedor, activo, created_at FROM usuarios WHERE id = ?').get(req.params.id);
+    success(res, updated);
+  } catch (err) {
+    console.error('Error toggling user:', err);
+    error(res, 'SERVER_ERROR', 'Error toggling user', 500);
+  }
+});
+
+app.delete('/api/v1/usuarios/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM usuarios WHERE id = ?').get(req.params.id);
+    if (!user) return error(res, 'NOT_FOUND', 'Usuario no encontrado', 404);
+
+    // Prevent deleting self
+    if (req.user.id === user.id) {
+      return error(res, 'FORBIDDEN', 'No puedes eliminar tu propia cuenta', 403);
+    }
+
+    // Prevent deleting last admin
+    const adminCount = db.prepare("SELECT COUNT(*) as c FROM usuarios WHERE rol = 'admin' AND activo = 1").get();
+    if (user.rol === 'admin' && adminCount.c <= 1) {
+      return error(res, 'FORBIDDEN', 'No puedes eliminar el último administrador', 403);
+    }
+
+    db.prepare('DELETE FROM usuarios WHERE id = ?').run(req.params.id);
+    success(res, { deleted: true, id: user.id });
+  } catch (err) {
+    console.error('Error deleting user:', err);
+    error(res, 'SERVER_ERROR', 'Error deleting user', 500);
+  }
+});
+
+// ══════════════════════════════════════
 // NOTIFICATION CONFIG
 // ══════════════════════════════════════
 

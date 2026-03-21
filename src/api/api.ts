@@ -605,3 +605,45 @@ export async function updateNotificationConfig(config: Record<string, string>): 
   const response = await api.put('/config/notificaciones', config)
   return response.data
 }
+
+// ── User Management ──
+
+export interface Usuario {
+  id: number
+  email: string
+  nombre: string
+  rol: 'admin' | 'partner'
+  vendedor: string | null
+  activo: number
+  created_at: string
+}
+
+export async function getUsuarios(): Promise<ApiResponse<Usuario[]>> {
+  try {
+    const response = await api.get('/usuarios')
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error' } }
+  }
+}
+
+export async function createUsuario(data: { email: string; password: string; nombre: string; rol: string; vendedor?: string }): Promise<ApiResponse<Usuario>> {
+  const response = await api.post('/usuarios', data)
+  return response.data
+}
+
+export async function updateUsuario(id: number, data: { email?: string; password?: string; nombre?: string; rol?: string; vendedor?: string }): Promise<ApiResponse<Usuario>> {
+  const response = await api.put(`/usuarios/${id}`, data)
+  return response.data
+}
+
+export async function toggleUsuario(id: number): Promise<ApiResponse<Usuario>> {
+  const response = await api.patch(`/usuarios/${id}/toggle`)
+  return response.data
+}
+
+export async function deleteUsuario(id: number): Promise<ApiResponse<{ deleted: boolean }>> {
+  const response = await api.delete(`/usuarios/${id}`)
+  return response.data
+}
