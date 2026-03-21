@@ -298,6 +298,15 @@ app.delete('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) =>
     `).run(req.user.nombre || req.user.email, req.params.id);
 
     success(res, { id: tour.id, eliminado: true, eliminado_por: req.user.nombre, eliminado_at: new Date().toISOString() });
+
+    // Notify about deletion
+    setImmediate(async () => {
+      try {
+        await notifications.onTourStatusChanged(tour, tour.estatus, 'Eliminado');
+      } catch (err) {
+        console.error('🔔 Notification error (tour delete):', err.message);
+      }
+    });
   } catch (err) {
     console.error('Error deleting tour:', err);
     error(res, 'SERVER_ERROR', 'Error deleting tour', 500);
@@ -421,6 +430,18 @@ app.put('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
 
     const updated = update('reservas_tours', req.params.id, data);
     success(res, updated);
+
+    // Notify if status changed
+    if (data.estatus && data.estatus !== existing.estatus) {
+      setImmediate(async () => {
+        try {
+          const fullTour = { ...existing, ...updated, email: existing.email_cliente || updated.email_cliente };
+          await notifications.onTourStatusChanged(fullTour, existing.estatus, data.estatus);
+        } catch (err) {
+          console.error('🔔 Notification error (tour PUT status):', err.message);
+        }
+      });
+    }
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error updating tour', 500);
   }
@@ -441,6 +462,16 @@ app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin'), (req, r
 
     const updated = update('reservas_tours', req.params.id, { estatus });
     success(res, updated);
+
+    // Notify status change
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...existing, ...updated, email: existing.email_cliente };
+        await notifications.onTourStatusChanged(fullTour, existing.estatus, estatus);
+      } catch (err) {
+        console.error('🔔 Notification error (tour PATCH status):', err.message);
+      }
+    });
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error updating status', 500);
   }
@@ -1038,6 +1069,16 @@ app.post('/api/v1/tours/:id/rechazar', requireAuth, requireRole('admin'), (req, 
     );
 
     success(res, updated);
+
+    // Notify about rejection
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...tour, ...updated, email: tour.email_cliente };
+        await notifications.onTourStatusChanged(fullTour, 'Por Aprobar', 'Rechazado');
+      } catch (err) {
+        console.error('🔔 Notification error (tour rechazar):', err.message);
+      }
+    });
   } catch (err) {
     console.error('Error rejecting tour:', err);
     error(res, 'SERVER_ERROR', 'Error al rechazar tour', 500);
