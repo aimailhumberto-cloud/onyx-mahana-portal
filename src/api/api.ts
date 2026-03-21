@@ -39,6 +39,12 @@ export interface Tour {
   hora: string
   cliente: string
   whatsapp?: string
+  email_cliente?: string
+  hotel?: string
+  nacionalidad?: string
+  idioma?: string
+  pax?: number
+  edades?: string
   estatus: string
   vendedor: string
   actividad: string

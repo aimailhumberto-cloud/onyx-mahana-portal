@@ -13,9 +13,10 @@ export default function TourForm() {
   const isEdit = !!id
 
   const [form, setForm] = useState({
-    cliente: '', whatsapp: '', fecha: '', hora: '', actividad: '', responsable: '',
+    cliente: '', whatsapp: '', email_cliente: '', fecha: '', hora: '', actividad: '', responsable: '',
     vendedor: 'Mahana Tours', estatus: 'Consulta', precio_ingreso: '', costo_pago: '',
-    comision_pct: '', notas: '', gestionado_por: '', fuente: 'manual'
+    comision_pct: '', notas: '', gestionado_por: '', fuente: 'manual',
+    hotel: '', nacionalidad: '', idioma: '', pax: '1', edades: ''
   })
   const [actividades, setActividades] = useState<Actividad[]>([])
   const [saving, setSaving] = useState(false)
@@ -30,11 +31,14 @@ export default function TourForm() {
         if (r.success && r.data) {
           const t = r.data
           setForm({
-            cliente: t.cliente || '', whatsapp: t.whatsapp || '', fecha: t.fecha || '', hora: t.hora || '',
+            cliente: t.cliente || '', whatsapp: t.whatsapp || '', email_cliente: t.email_cliente || '',
+            fecha: t.fecha || '', hora: t.hora || '',
             actividad: t.actividad || '', responsable: t.responsable || '', vendedor: t.vendedor || 'Mahana Tours',
             estatus: t.estatus || 'Consulta', precio_ingreso: t.precio_ingreso?.toString() || '',
             costo_pago: t.costo_pago?.toString() || '', comision_pct: t.comision_pct?.toString() || '',
-            notas: t.notas || '', gestionado_por: t.gestionado_por || '', fuente: t.fuente || 'manual'
+            notas: t.notas || '', gestionado_por: t.gestionado_por || '', fuente: t.fuente || 'manual',
+            hotel: t.hotel || '', nacionalidad: t.nacionalidad || '', idioma: t.idioma || '',
+            pax: t.pax?.toString() || '1', edades: t.edades || ''
           })
         }
         setLoading(false)
@@ -74,7 +78,8 @@ export default function TourForm() {
       ...form,
       precio_ingreso: precioVenta,
       costo_pago: costo,
-      ganancia_mahana: ganancia
+      ganancia_mahana: ganancia,
+      pax: parseInt(form.pax) || 1,
     }
     if (form.comision_pct) data.comision_pct = comisionPct
     try {
@@ -108,98 +113,148 @@ export default function TourForm() {
       )}
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm p-6 space-y-5">
-        {/* Client Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
-            <input required value={form.cliente} onChange={e => onChange('cliente', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Nombre del cliente" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
-            <input value={form.whatsapp} onChange={e => onChange('whatsapp', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="+507..." />
-          </div>
-        </div>
-
-        {/* Activity + Date */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Actividad *</label>
-            <select required value={form.actividad} onChange={e => handleActividadChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
-              <option value="">Seleccionar...</option>
-              {actividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
-            <input required type="date" value={form.fecha} onChange={e => onChange('fecha', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
-            <input type="time" value={form.hora} onChange={e => onChange('hora', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
-          </div>
-        </div>
-
-        {/* Vendedor (dropdown) + Responsable (free text) + Status */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
-            <select value={form.vendedor} onChange={e => onChange('vendedor', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
-              {VENDEDORES.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Responsable</label>
-            <input value={form.responsable} onChange={e => onChange('responsable', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Nombre del responsable" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
-            <select value={form.estatus} onChange={e => onChange('estatus', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
-              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* Pricing: Precio de Venta + Costo + % Comisión + Ganancia */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Precio Venta $</label>
-            <input type="number" step="0.01" value={form.precio_ingreso} onChange={e => onChange('precio_ingreso', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0.00" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Costo $</label>
-            <input type="number" step="0.01" value={form.costo_pago} onChange={e => onChange('costo_pago', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0.00" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Comisión %</label>
-            <input type="number" step="0.1" value={form.comision_pct} onChange={e => onChange('comision_pct', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Ganancia</label>
-            <div className={`px-3 py-2 border rounded-lg font-semibold ${ganancia >= 0 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
-              ${ganancia.toFixed(2)}
+        {/* Section: Client Info */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Datos del Cliente</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
+              <input required value={form.cliente} onChange={e => onChange('cliente', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Nombre completo" />
             </div>
-            {comisionPct > 0 && (
-              <p className="text-[10px] text-gray-400 mt-0.5">= Venta - Costo - {comisionPct}%</p>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+              <input value={form.whatsapp} onChange={e => onChange('whatsapp', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="+507..." />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input type="email" value={form.email_cliente} onChange={e => onChange('email_cliente', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="cliente@email.com" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hotel / Alojamiento</label>
+              <input value={form.hotel} onChange={e => onChange('hotel', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Ej: PH Playa Caracol T2-3B" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nacionalidad</label>
+              <input value={form.nacionalidad} onChange={e => onChange('nacionalidad', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Ej: Panamá" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Idioma</label>
+              <select value={form.idioma} onChange={e => onChange('idioma', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
+                <option value="">Seleccionar</option>
+                <option value="Español">Español</option>
+                <option value="English">English</option>
+                <option value="Français">Français</option>
+                <option value="Otro">Otro</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1"># Personas</label>
+              <input type="number" min="1" max="50" value={form.pax} onChange={e => onChange('pax', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Edades</label>
+              <input value={form.edades} onChange={e => onChange('edades', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="25, 30, 8" />
+            </div>
+          </div>
+        </div>
+
+        {/* Section: Tour Info */}
+        <div className="border-t border-gray-100 pt-5">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Detalles del Tour</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Actividad *</label>
+              <select required value={form.actividad} onChange={e => handleActividadChange(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
+                <option value="">Seleccionar...</option>
+                {actividades.map(a => <option key={a.id} value={a.nombre}>{a.nombre}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
+              <input required type="date" value={form.fecha} onChange={e => onChange('fecha', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hora</label>
+              <input type="time" value={form.hora} onChange={e => onChange('hora', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Section: Operations */}
+        <div className="border-t border-gray-100 pt-5">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Operaciones</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Vendedor</label>
+              <select value={form.vendedor} onChange={e => onChange('vendedor', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
+                {VENDEDORES.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Responsable</label>
+              <input value={form.responsable} onChange={e => onChange('responsable', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Nombre del responsable" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+              <select value={form.estatus} onChange={e => onChange('estatus', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
+                {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Section: Pricing */}
+        <div className="border-t border-gray-100 pt-5">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Financiero</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Venta $</label>
+              <input type="number" step="0.01" value={form.precio_ingreso} onChange={e => onChange('precio_ingreso', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Costo $</label>
+              <input type="number" step="0.01" value={form.costo_pago} onChange={e => onChange('costo_pago', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0.00" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Comisión %</label>
+              <input type="number" step="0.1" value={form.comision_pct} onChange={e => onChange('comision_pct', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Ganancia</label>
+              <div className={`px-3 py-2 border rounded-lg font-semibold ${ganancia >= 0 ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                ${ganancia.toFixed(2)}
+              </div>
+              {comisionPct > 0 && (
+                <p className="text-[10px] text-gray-400 mt-0.5">= Venta - Costo - {comisionPct}%</p>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Notes */}
-        <div>
+        <div className="border-t border-gray-100 pt-5">
           <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
           <textarea rows={3} value={form.notas} onChange={e => onChange('notas', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 resize-none" placeholder="Notas adicionales..." />
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 resize-none" placeholder="Punto de encuentro, alergias, restricciones, detalles importantes..." />
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
