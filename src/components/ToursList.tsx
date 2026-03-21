@@ -89,6 +89,22 @@ export default function ToursList() {
     if (actionLoading) return
     setActionLoading(true)
     try {
+      // Fetch full details to check for missing fields
+      const detail = await getTourById(id)
+      if (detail.success && detail.data) {
+        const t = detail.data
+        const missing: string[] = []
+        if (!t.precio_ingreso) missing.push('Precio Venta')
+        if (!t.costo_pago && t.costo_pago !== 0) missing.push('Costo')
+        if (!t.responsable) missing.push('Responsable')
+        
+        if (missing.length > 0) {
+          alert(`⚠️ Faltan campos obligatorios: ${missing.join(', ')}.\n\nDebes completar estos datos antes de aprobar. Se abrirá el formulario de edición.`)
+          navigate(`/tours/${id}/edit`)
+          setActionLoading(false)
+          return
+        }
+      }
       const res = await aprobarTour(id)
       if (res.success) loadTours(meta.page)
     } catch { }

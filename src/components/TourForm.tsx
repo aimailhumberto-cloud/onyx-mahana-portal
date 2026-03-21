@@ -123,32 +123,32 @@ export default function TourForm() {
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Nombre completo" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
-              <input value={form.whatsapp} onChange={e => onChange('whatsapp', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp *</label>
+              <input required value={form.whatsapp} onChange={e => onChange('whatsapp', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="+507..." />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" value={form.email_cliente} onChange={e => onChange('email_cliente', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+              <input type="email" required value={form.email_cliente} onChange={e => onChange('email_cliente', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="cliente@email.com" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hotel / Alojamiento</label>
-              <input value={form.hotel} onChange={e => onChange('hotel', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hotel / Alojamiento *</label>
+              <input required value={form.hotel} onChange={e => onChange('hotel', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Ej: PH Playa Caracol T2-3B" />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nacionalidad</label>
-              <input value={form.nacionalidad} onChange={e => onChange('nacionalidad', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nacionalidad *</label>
+              <input required value={form.nacionalidad} onChange={e => onChange('nacionalidad', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Ej: Panamá" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Idioma</label>
-              <select value={form.idioma} onChange={e => onChange('idioma', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Idioma *</label>
+              <select required value={form.idioma} onChange={e => onChange('idioma', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 bg-white">
-                <option value="">Seleccionar</option>
+                <option value="">Seleccionar *</option>
                 <option value="Español">Español</option>
                 <option value="English">English</option>
                 <option value="Français">Français</option>
@@ -156,13 +156,13 @@ export default function TourForm() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1"># Personas</label>
-              <input type="number" min="1" max="50" value={form.pax} onChange={e => onChange('pax', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1"># Personas *</label>
+              <input type="number" required min="1" max="50" value={form.pax} onChange={e => onChange('pax', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Edades</label>
-              <input value={form.edades} onChange={e => onChange('edades', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Edades *</label>
+              <input required value={form.edades} onChange={e => onChange('edades', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="25, 30, 8" />
             </div>
           </div>
@@ -205,8 +205,8 @@ export default function TourForm() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Responsable</label>
-              <input value={form.responsable} onChange={e => onChange('responsable', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Responsable *</label>
+              <input required value={form.responsable} onChange={e => onChange('responsable', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="Nombre del responsable" />
             </div>
             <div>
@@ -224,13 +224,13 @@ export default function TourForm() {
           <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">Financiero</h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Venta $</label>
-              <input type="number" step="0.01" value={form.precio_ingreso} onChange={e => onChange('precio_ingreso', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Venta $ *</label>
+              <input type="number" required step="0.01" value={form.precio_ingreso} onChange={e => onChange('precio_ingreso', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0.00" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Costo $</label>
-              <input type="number" step="0.01" value={form.costo_pago} onChange={e => onChange('costo_pago', e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Costo $ *</label>
+              <input type="number" required step="0.01" value={form.costo_pago} onChange={e => onChange('costo_pago', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500" placeholder="0.00" />
             </div>
             <div>
