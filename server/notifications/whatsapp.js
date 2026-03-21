@@ -2,21 +2,23 @@
  * WhatsApp Notification Module — Mahana Tours
  * Uses Baileys (unofficial WhatsApp Web API)
  * 
- * First run: Shows QR code in terminal — scan with your phone.
- * After linking: Session persists in data/whatsapp-session/
+ * QR code is served via GET /api/v1/whatsapp/qr (as base64 PNG)
+ * Admin can scan it from the portal's admin panel.
  */
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 
 const WHATSAPP_ENABLED = process.env.WHATSAPP_ENABLED === 'true';
 const SESSION_DIR = path.join(__dirname, '../../data/whatsapp-session');
-const WHATSAPP_NOTIFY_NUMBER = process.env.WHATSAPP_NOTIFY_NUMBER || ''; // e.g. 50762906800
+const WHATSAPP_NOTIFY_NUMBER = process.env.WHATSAPP_NOTIFY_NUMBER || '';
 
 let sock = null;
 let isConnected = false;
 let connectionRetries = 0;
-const MAX_RETRIES = 3;
+let currentQR = null; // Stores the latest QR code as base64 PNG data URL
+const MAX_RETRIES = 5;
 
 // Ensure session directory exists
 if (!fs.existsSync(SESSION_DIR)) {
@@ -34,9 +36,7 @@ async function connectWhatsApp() {
 
     sock = makeWASocket({
       auth: state,
-      printQRInTerminal: true, // Shows QR in server logs
       browser: ['Mahana Portal', 'Server', '1.0.0'],
-      // Reduce logging noise
       logger: {
         level: 'silent',
         trace: () => {},
@@ -45,15 +45,17 @@ async function connectWhatsApp() {
         warn: console.warn,
         error: console.error,
         fatal: console.error,
-        child: () => ({
-          trace: () => {},
-          debug: () => {},
-          info: () => {},
-          warn: console.warn,
-          error: console.error,
-          fatal: console.error,
-          child: () => this,
-        }),
+        child: function() {
+          return {
+            trace: () => {},
+            debug: () => {},
+            info: () => {},
+            warn: console.warn,
+            error: console.error,
+            fatal: console.error,
+            child: function() { return this; },
+          };
+        },
       },
     });
 
@@ -61,23 +63,32 @@ async function connectWhatsApp() {
     sock.ev.on('creds.update', saveCreds);
 
     // Connection status
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        console.log('💬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.log('💬 SCAN THIS QR CODE WITH YOUR WHATSAPP');
-        console.log('💬 Phone → Settings → Linked Devices → Link a Device');
-        console.log('💬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        // Generate QR code as base64 PNG
+        try {
+          currentQR = await QRCode.toDataURL(qr, { width: 400, margin: 2 });
+          console.log('💬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('💬 QR CODE READY — Scan from your portal:');
+          console.log('💬 Go to Admin → WhatsApp → Scan QR');
+          console.log('💬 Or visit: GET /api/v1/whatsapp/qr');
+          console.log('💬 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        } catch (err) {
+          console.error('💬 Error generating QR code:', err.message);
+        }
       }
 
       if (connection === 'close') {
         isConnected = false;
-        const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+        currentQR = null;
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         
         if (shouldReconnect && connectionRetries < MAX_RETRIES) {
           connectionRetries++;
-          console.log(`💬 WhatsApp disconnected. Reconnecting (${connectionRetries}/${MAX_RETRIES})...`);
+          console.log(`💬 WhatsApp disconnected (code: ${statusCode}). Reconnecting (${connectionRetries}/${MAX_RETRIES})...`);
           setTimeout(connectWhatsApp, 5000);
         } else if (!shouldReconnect) {
           console.log('💬 WhatsApp logged out. Delete data/whatsapp-session and restart to re-link.');
@@ -89,6 +100,7 @@ async function connectWhatsApp() {
       if (connection === 'open') {
         isConnected = true;
         connectionRetries = 0;
+        currentQR = null; // Clear QR once connected
         console.log('💬 WhatsApp connected ✅');
       }
     });
@@ -102,13 +114,10 @@ async function connectWhatsApp() {
 
 // Format phone number for WhatsApp (must be: countrycode+number@s.whatsapp.net)
 function formatNumber(number) {
-  // Remove +, spaces, dashes
   let clean = number.replace(/[\s\-\+\(\)]/g, '');
-  // Add @s.whatsapp.net
   return `${clean}@s.whatsapp.net`;
 }
 
-// Format group ID (must end with @g.us)
 function formatGroup(groupId) {
   if (groupId.includes('@')) return groupId;
   return `${groupId}@g.us`;
@@ -225,7 +234,12 @@ function getStatus() {
     enabled: WHATSAPP_ENABLED,
     connected: isConnected,
     notifyNumber: WHATSAPP_NOTIFY_NUMBER,
+    qrAvailable: !!currentQR,
   };
+}
+
+function getCurrentQR() {
+  return currentQR;
 }
 
 module.exports = {
@@ -240,5 +254,6 @@ module.exports = {
   formatNewEstadia,
   formatEstadiaStatus,
   getStatus,
+  getCurrentQR,
   WHATSAPP_NOTIFY_NUMBER,
 };

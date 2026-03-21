@@ -1953,6 +1953,36 @@ app.post('/api/v1/plantillas/generar', requireAuth, requireRole('admin'), (req, 
     error(res, 'SERVER_ERROR', 'Error generating slots', 500);
   }
 });
+// ══════════════════════════════════════
+// WHATSAPP API
+// ══════════════════════════════════════
+
+const whatsapp = require('./notifications/whatsapp');
+
+// Get WhatsApp status
+app.get('/api/v1/whatsapp/status', requireAuth, requireRole('admin'), (req, res) => {
+  success(res, whatsapp.getStatus());
+});
+
+// Get QR code as base64 PNG (for scanning in browser)
+app.get('/api/v1/whatsapp/qr', requireAuth, requireRole('admin'), (req, res) => {
+  const qr = whatsapp.getCurrentQR();
+  if (!qr) {
+    return error(res, 'NO_QR', whatsapp.getStatus().connected
+      ? 'WhatsApp ya está conectado — no se necesita QR'
+      : 'No hay QR disponible. Verifica que WHATSAPP_ENABLED=true y reinicia el servidor.', 404);
+  }
+  success(res, { qr, status: whatsapp.getStatus() });
+});
+
+// Send test message
+app.post('/api/v1/whatsapp/test', requireAuth, requireRole('admin'), async (req, res) => {
+  const { numero } = req.body;
+  const target = numero || whatsapp.WHATSAPP_NOTIFY_NUMBER;
+  if (!target) return error(res, 'VALIDATION_ERROR', 'Número requerido', 400);
+  const result = await whatsapp.sendWhatsApp(target, '✅ *Mahana Portal* — Mensaje de prueba. WhatsApp está conectado correctamente.');
+  success(res, result);
+});
 
 // ══════════════════════════════════════
 // STATIC FILES + SPA FALLBACK
