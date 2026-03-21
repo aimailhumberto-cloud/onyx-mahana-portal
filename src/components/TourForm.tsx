@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
-import { createTour, getTourById, updateTour, getActividades } from '../api/api'
+import { ArrowLeft, Save, Loader2, CheckCircle, AlertCircle, Upload, X, Image } from 'lucide-react'
+import { createTour, getTourById, updateTour, getActividades, uploadFile } from '../api/api'
 import type { Actividad } from '../api/api'
 
 const STATUSES = ['Consulta', 'Reservado', 'Pagado', 'Cancelado', 'Cerrado']
@@ -21,6 +21,11 @@ export default function TourForm() {
   const [actividades, setActividades] = useState<Actividad[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(isEdit)
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null)
+  const [comprobantePreview, setComprobantePreview] = useState<string | null>(null)
+  const [existingComprobante, setExistingComprobante] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   useEffect(() => {
@@ -40,6 +45,7 @@ export default function TourForm() {
             hotel: t.hotel || '', nacionalidad: t.nacionalidad || '', idioma: t.idioma || '',
             pax: t.pax?.toString() || '1', edades: t.edades || ''
           })
+          if ((t as any).comprobante_url) setExistingComprobante((t as any).comprobante_url)
         }
         setLoading(false)
       })
@@ -70,10 +76,50 @@ export default function TourForm() {
   const montoComision = precioVenta * (comisionPct / 100)
   const ganancia = precioVenta - costo - montoComision
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      setComprobanteFile(file)
+      const reader = new FileReader()
+      reader.onload = (ev) => setComprobantePreview(ev.target?.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeComprobante = () => {
+    setComprobanteFile(null)
+    setComprobantePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
     setResult(null)
+
+    // Upload file first if selected
+    let comprobanteUrl = existingComprobante || undefined
+    if (comprobanteFile) {
+      setUploading(true)
+      try {
+        const uploadRes = await uploadFile(comprobanteFile)
+        if (uploadRes.success) {
+          comprobanteUrl = uploadRes.data.url
+        } else {
+          setResult({ type: 'error', message: uploadRes.error?.message || 'Error al subir archivo' })
+          setSaving(false)
+          setUploading(false)
+          return
+        }
+      } catch {
+        setResult({ type: 'error', message: 'Error al subir archivo' })
+        setSaving(false)
+        setUploading(false)
+        return
+      }
+      setUploading(false)
+    }
+
     const data: any = {
       ...form,
       precio_ingreso: precioVenta,
@@ -81,6 +127,7 @@ export default function TourForm() {
       ganancia_mahana: ganancia,
       pax: parseInt(form.pax) || 1,
     }
+    if (comprobanteUrl) data.comprobante_url = comprobanteUrl
     if (form.comision_pct) data.comision_pct = comisionPct
     try {
       const res = isEdit ? await updateTour(Number(id), data) : await createTour(data)
@@ -257,13 +304,55 @@ export default function TourForm() {
             className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 resize-none" placeholder="Punto de encuentro, alergias, restricciones, detalles importantes..." />
         </div>
 
+        {/* Comprobante / Archivo */}
+        <div className="border-t border-gray-100 pt-5">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Comprobante de pago / Archivo adjunto</label>
+          
+          {existingComprobante && !comprobantePreview && (
+            <div className="mb-3 border border-gray-200 rounded-xl overflow-hidden">
+              <img src={existingComprobante} alt="Comprobante actual" className="w-full max-h-48 object-contain bg-gray-50" />
+              <div className="px-4 py-2 bg-turquoise-50 border-t border-turquoise-100 flex items-center gap-2">
+                <Image className="w-4 h-4 text-turquoise-600" />
+                <span className="text-sm text-turquoise-700 font-medium">Comprobante actual</span>
+              </div>
+            </div>
+          )}
+
+          {!comprobantePreview ? (
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center cursor-pointer hover:border-turquoise-400 hover:bg-turquoise-50/50 transition-all group"
+            >
+              <Upload className="w-8 h-8 text-gray-300 mx-auto mb-2 group-hover:text-turquoise-400 transition-colors" />
+              <p className="text-sm font-medium text-gray-600 group-hover:text-turquoise-600">
+                {existingComprobante ? 'Cambiar archivo' : 'Haz clic para subir foto o archivo'}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF — Máx 10MB</p>
+            </div>
+          ) : (
+            <div className="relative border border-gray-200 rounded-xl overflow-hidden">
+              <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-48 object-contain bg-gray-50" />
+              <button type="button" onClick={removeComprobante}
+                className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg">
+                <X className="w-4 h-4" />
+              </button>
+              <div className="px-4 py-2 bg-green-50 border-t border-green-100 flex items-center gap-2">
+                <Image className="w-4 h-4 text-green-600" />
+                <span className="text-sm text-green-700 font-medium">{comprobanteFile?.name}</span>
+                <span className="text-xs text-green-500 ml-auto">{comprobanteFile ? `${(comprobanteFile.size / 1024).toFixed(0)} KB` : ''}</span>
+              </div>
+            </div>
+          )}
+          <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleFileChange} className="hidden" />
+        </div>
+
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={() => navigate('/tours')} className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">
             Cancelar
           </button>
           <button type="submit" disabled={saving} className="px-6 py-2 bg-turquoise-600 text-white rounded-lg font-medium hover:bg-turquoise-700 disabled:opacity-50 flex items-center gap-2">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {isEdit ? 'Guardar Cambios' : 'Crear Tour'}
+            {uploading ? 'Subiendo archivo...' : isEdit ? 'Guardar Cambios' : 'Crear Tour'}
           </button>
         </div>
       </form>
