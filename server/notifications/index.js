@@ -34,31 +34,38 @@ async function initialize() {
 
 async function onTourCreated(tour) {
   const results = {};
+  const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+  const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   
   // Email confirmation to client
-  try {
-    results.email = await email.sendConfirmacion(tour);
-  } catch (err) {
-    console.error('🔔 Notification error (email/create):', err.message);
-    results.email = { success: false, error: err.message };
+  if (isEnabled('email') || process.env.SMTP_PASS) {
+    try {
+      results.email = await email.sendConfirmacion(tour, cc || undefined);
+    } catch (err) {
+      console.error('🔔 Notification error (email/create):', err.message);
+      results.email = { success: false, error: err.message };
+    }
   }
 
   // WhatsApp to team/owner
-  try {
-    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatNewTour(tour));
+  if (waNumber) {
+    try {
+      results.whatsapp = await whatsapp.sendWhatsApp(waNumber, whatsapp.formatNewTour(tour));
+    } catch (err) {
+      console.error('🔔 Notification error (whatsapp/create):', err.message);
+      results.whatsapp = { success: false, error: err.message };
     }
-  } catch (err) {
-    console.error('🔔 Notification error (whatsapp/create):', err.message);
-    results.whatsapp = { success: false, error: err.message };
   }
 
   // Telegram to group/agent
-  try {
-    results.telegram = await telegram.sendTelegram(null, telegram.formatNewTour(tour));
-  } catch (err) {
-    console.error('🔔 Notification error (telegram/create):', err.message);
-    results.telegram = { success: false, error: err.message };
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatNewTour(tour));
+    } catch (err) {
+      console.error('🔔 Notification error (telegram/create):', err.message);
+      results.telegram = { success: false, error: err.message };
+    }
   }
 
   console.log(`🔔 Notifications for tour #${tour.id}:`, JSON.stringify(results));
@@ -67,31 +74,38 @@ async function onTourCreated(tour) {
 
 async function onTourApproved(tour) {
   const results = {};
+  const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+  const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   
   // Email confirmation to client
-  try {
-    results.email = await email.sendConfirmacion(tour);
-  } catch (err) {
-    console.error('🔔 Notification error (email/approve):', err.message);
-    results.email = { success: false, error: err.message };
+  if (isEnabled('email') || process.env.SMTP_PASS) {
+    try {
+      results.email = await email.sendConfirmacion(tour, cc || undefined);
+    } catch (err) {
+      console.error('🔔 Notification error (email/approve):', err.message);
+      results.email = { success: false, error: err.message };
+    }
   }
 
   // WhatsApp to team/owner
-  try {
-    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatApprovedTour(tour));
+  if (waNumber) {
+    try {
+      results.whatsapp = await whatsapp.sendWhatsApp(waNumber, whatsapp.formatApprovedTour(tour));
+    } catch (err) {
+      console.error('🔔 Notification error (whatsapp/approve):', err.message);
+      results.whatsapp = { success: false, error: err.message };
     }
-  } catch (err) {
-    console.error('🔔 Notification error (whatsapp/approve):', err.message);
-    results.whatsapp = { success: false, error: err.message };
   }
 
   // Telegram to group/agent
-  try {
-    results.telegram = await telegram.sendTelegram(null, telegram.formatApprovedTour(tour));
-  } catch (err) {
-    console.error('🔔 Notification error (telegram/approve):', err.message);
-    results.telegram = { success: false, error: err.message };
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatApprovedTour(tour));
+    } catch (err) {
+      console.error('🔔 Notification error (telegram/approve):', err.message);
+      results.telegram = { success: false, error: err.message };
+    }
   }
 
   console.log(`🔔 Notifications for approved tour #${tour.id}:`, JSON.stringify(results));
@@ -100,6 +114,8 @@ async function onTourApproved(tour) {
 
 async function onTourStatusChanged(tour, oldStatus, newStatus) {
   const results = {};
+  const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   
   // Email on Pagado
   if (newStatus === 'Pagado' && tour.email) {
@@ -115,20 +131,22 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
   }
 
   // WhatsApp status change to team
-  try {
-    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
+  if (waNumber) {
+    try {
       const msg = `🔄 *Tour #${tour.id} — ${oldStatus} → ${newStatus}*\n${tour.actividad || ''} — ${tour.cliente || ''}`;
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, msg);
+      results.whatsapp = await whatsapp.sendWhatsApp(waNumber, msg);
+    } catch (err) {
+      results.whatsapp = { success: false, error: err.message };
     }
-  } catch (err) {
-    results.whatsapp = { success: false, error: err.message };
   }
 
   // Telegram status change
-  try {
-    results.telegram = await telegram.sendTelegram(null, telegram.formatStatusChange(tour, oldStatus, newStatus));
-  } catch (err) {
-    results.telegram = { success: false, error: err.message };
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatStatusChange(tour, oldStatus, newStatus));
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
   }
 
   return results;
@@ -137,28 +155,35 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
 
 async function onEstadiaCreated(estadia) {
   const results = {};
+  const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+  const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
 
   // Email to client
-  try {
-    results.email = await email.sendEstadiaConfirmacion(estadia);
-  } catch (err) {
-    results.email = { success: false, error: err.message };
+  if (isEnabled('email') || process.env.SMTP_PASS) {
+    try {
+      results.email = await email.sendEstadiaConfirmacion(estadia, cc || undefined);
+    } catch (err) {
+      results.email = { success: false, error: err.message };
+    }
   }
 
   // WhatsApp to team
-  try {
-    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatNewEstadia(estadia));
+  if (waNumber) {
+    try {
+      results.whatsapp = await whatsapp.sendWhatsApp(waNumber, whatsapp.formatNewEstadia(estadia));
+    } catch (err) {
+      results.whatsapp = { success: false, error: err.message };
     }
-  } catch (err) {
-    results.whatsapp = { success: false, error: err.message };
   }
 
   // Telegram
-  try {
-    results.telegram = await telegram.sendTelegram(null, telegram.formatNewEstadia(estadia));
-  } catch (err) {
-    results.telegram = { success: false, error: err.message };
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatNewEstadia(estadia));
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
   }
 
   console.log(`🔔 Notifications for estadía #${estadia.id}:`, JSON.stringify(results));
@@ -167,6 +192,8 @@ async function onEstadiaCreated(estadia) {
 
 async function onEstadiaStatusChanged(estadia, oldStatus, newStatus) {
   const results = {};
+  const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
 
   // Email on Confirmada or Pagada
   if (['Confirmada', 'Pagada'].includes(newStatus) && estadia.email) {
@@ -178,19 +205,21 @@ async function onEstadiaStatusChanged(estadia, oldStatus, newStatus) {
   }
 
   // WhatsApp to team
-  try {
-    if (whatsapp.WHATSAPP_NOTIFY_NUMBER) {
-      results.whatsapp = await whatsapp.sendWhatsApp(whatsapp.WHATSAPP_NOTIFY_NUMBER, whatsapp.formatEstadiaStatus(estadia, oldStatus, newStatus));
+  if (waNumber) {
+    try {
+      results.whatsapp = await whatsapp.sendWhatsApp(waNumber, whatsapp.formatEstadiaStatus(estadia, oldStatus, newStatus));
+    } catch (err) {
+      results.whatsapp = { success: false, error: err.message };
     }
-  } catch (err) {
-    results.whatsapp = { success: false, error: err.message };
   }
 
   // Telegram
-  try {
-    results.telegram = await telegram.sendTelegram(null, telegram.formatEstadiaStatus(estadia, oldStatus, newStatus));
-  } catch (err) {
-    results.telegram = { success: false, error: err.message };
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatEstadiaStatus(estadia, oldStatus, newStatus));
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
   }
 
   console.log(`🔔 Estadía #${estadia.id} ${oldStatus} → ${newStatus}:`, JSON.stringify(results));
