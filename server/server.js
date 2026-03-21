@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { getDb, findAll, findById, create, update, remove } = require('./db/database');
-const { verifyPassword, generateToken, requireAuth, requireRole, isPartner } = require('./auth');
+const { verifyPassword, hashPassword, generateToken, requireAuth, requireRole, isPartner } = require('./auth');
 const notifications = require('./notifications');
 
 // ── Multer config for file uploads ──

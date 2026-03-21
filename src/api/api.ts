@@ -635,8 +635,13 @@ export async function getUsuarios(): Promise<ApiResponse<Usuario[]>> {
 }
 
 export async function createUsuario(data: { email: string; password: string; nombre: string; rol: string; vendedor?: string }): Promise<ApiResponse<Usuario>> {
-  const response = await api.post('/usuarios', data)
-  return response.data
+  try {
+    const response = await api.post('/usuarios', data)
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: null as any, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
 }
 
 export async function updateUsuario(id: number, data: { email?: string; password?: string; nombre?: string; rol?: string; vendedor?: string }): Promise<ApiResponse<Usuario>> {
