@@ -25,6 +25,19 @@ if (!fs.existsSync(SESSION_DIR)) {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
 }
 
+// Clear stale/corrupted session
+function clearSession() {
+  try {
+    if (fs.existsSync(SESSION_DIR)) {
+      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+      fs.mkdirSync(SESSION_DIR, { recursive: true });
+      console.log('💬 WhatsApp session cleared.');
+    }
+  } catch (err) {
+    console.error('💬 Error clearing session:', err.message);
+  }
+}
+
 async function connectWhatsApp() {
   if (!WHATSAPP_ENABLED) {
     console.log('💬 WhatsApp disabled (set WHATSAPP_ENABLED=true to enable)');
@@ -86,12 +99,23 @@ async function connectWhatsApp() {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         
-        if (shouldReconnect && connectionRetries < MAX_RETRIES) {
+        // 405 = stale/corrupted session — clear and retry fresh
+        if (statusCode === 405 || statusCode === 401 || statusCode === 403) {
+          console.log(`💬 WhatsApp auth error (code: ${statusCode}). Clearing session and retrying...`);
+          clearSession();
+          if (connectionRetries < MAX_RETRIES) {
+            connectionRetries++;
+            setTimeout(connectWhatsApp, 3000);
+          } else {
+            console.error('💬 WhatsApp max retries after session clear. Check WHATSAPP_ENABLED and restart.');
+          }
+        } else if (shouldReconnect && connectionRetries < MAX_RETRIES) {
           connectionRetries++;
           console.log(`💬 WhatsApp disconnected (code: ${statusCode}). Reconnecting (${connectionRetries}/${MAX_RETRIES})...`);
           setTimeout(connectWhatsApp, 5000);
         } else if (!shouldReconnect) {
-          console.log('💬 WhatsApp logged out. Delete data/whatsapp-session and restart to re-link.');
+          console.log('💬 WhatsApp logged out. Clearing session...');
+          clearSession();
         } else {
           console.error('💬 WhatsApp max retries reached. Restart server to try again.');
         }
@@ -255,5 +279,6 @@ module.exports = {
   formatEstadiaStatus,
   getStatus,
   getCurrentQR,
+  clearSession,
   WHATSAPP_NOTIFY_NUMBER,
 };

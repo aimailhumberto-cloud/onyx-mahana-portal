@@ -1984,6 +1984,13 @@ app.post('/api/v1/whatsapp/test', requireAuth, requireRole('admin'), async (req,
   success(res, result);
 });
 
+// Reset WhatsApp session (clear and reconnect)
+app.post('/api/v1/whatsapp/reset', requireAuth, requireRole('admin'), async (req, res) => {
+  whatsapp.clearSession();
+  setTimeout(() => whatsapp.connectWhatsApp(), 1000);
+  success(res, { message: 'Session cleared. Reconnecting... Check /whatsapp/qr in a few seconds for the new QR code.' });
+});
+
 // ══════════════════════════════════════
 // STATIC FILES + SPA FALLBACK
 // ══════════════════════════════════════
