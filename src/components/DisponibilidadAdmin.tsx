@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getActividades, getDisponibilidad, createSlot, updateSlot, deleteSlot, getPlantillas, createPlantilla, updatePlantilla, deletePlantilla, generarSlotsMes } from '../api/api'
 import type { Actividad, Slot, Plantilla } from '../api/api'
-import { Loader2, Plus, Trash2, Lock, Unlock, Calendar, Clock, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle, Edit3, X, Save, Info } from 'lucide-react'
+import { Loader2, Plus, Trash2, Lock, Unlock, Calendar, Clock, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, CheckCircle, Edit3, X, Save, Info, Zap } from 'lucide-react'
 
 const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 const DAYS_FULL = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']
@@ -9,7 +9,7 @@ const DAYS_FULL = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Vierne
 function getWeekDates(startDate: string): string[] {
   const d = new Date(startDate + 'T12:00:00')
   const day = d.getDay()
-  d.setDate(d.getDate() - day) // go to Sunday
+  d.setDate(d.getDate() - day)
   const dates: string[] = []
   for (let i = 0; i < 7; i++) {
     dates.push(d.toISOString().split('T')[0])
@@ -27,6 +27,34 @@ function formatDateRange(dates: string[]): string {
   return `${fmt(dates[0])} — ${fmt(dates[dates.length - 1])}`
 }
 
+/** Generate array of times from start to end at interval minutes */
+function generateTimeSlots(from: string, to: string, intervalMin: number): string[] {
+  const times: string[] = []
+  const [fh, fm] = from.split(':').map(Number)
+  const [th, tm] = to.split(':').map(Number)
+  let current = fh * 60 + fm
+  const end = th * 60 + tm
+  while (current <= end) {
+    const h = String(Math.floor(current / 60)).padStart(2, '0')
+    const m = String(current % 60).padStart(2, '0')
+    times.push(`${h}:${m}`)
+    current += intervalMin
+  }
+  return times
+}
+
+/** Get all dates between two dates inclusive */
+function getDatesBetween(start: string, end: string): string[] {
+  const dates: string[] = []
+  const d = new Date(start + 'T12:00:00')
+  const e = new Date(end + 'T12:00:00')
+  while (d <= e) {
+    dates.push(d.toISOString().split('T')[0])
+    d.setDate(d.getDate() + 1)
+  }
+  return dates
+}
+
 export default function DisponibilidadAdmin() {
   const [actividades, setActividades] = useState<Actividad[]>([])
   const [slots, setSlots] = useState<Slot[]>([])
@@ -36,17 +64,34 @@ export default function DisponibilidadAdmin() {
   const [currentDate, setCurrentDate] = useState(() => new Date().toISOString().split('T')[0])
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
-  // New slot form
+  // Bulk slot creation form
   const [showNewSlot, setShowNewSlot] = useState(false)
-  const [newSlot, setNewSlot] = useState({ actividad_id: '', fecha: '', hora: '08:00', capacidad: '6' })
+  const [bulkForm, setBulkForm] = useState({
+    actividad_id: '',
+    fecha_desde: '',
+    fecha_hasta: '',
+    hora_desde: '08:00',
+    hora_hasta: '16:00',
+    intervalo: '60',
+    capacidad: '6',
+  })
+  const [creating, setCreating] = useState(false)
 
-  // Edit slot
+  // Quick-add from calendar click
+  const [quickAdd, setQuickAdd] = useState<{ actividad_id: number; fecha: string } | null>(null)
+  const [quickHora, setQuickHora] = useState('08:00')
+  const [quickCapacidad, setQuickCapacidad] = useState('6')
+
+  // Edit slot inline
   const [editingSlotId, setEditingSlotId] = useState<number | null>(null)
   const [editSlotData, setEditSlotData] = useState({ hora: '', capacidad: '' })
 
-  // New plantilla form — supports multiple days and hours
+  // Plantilla form
   const [showNewPlantilla, setShowNewPlantilla] = useState(false)
-  const [newPlantilla, setNewPlantilla] = useState({ actividad_id: '', dias_semana: [] as number[], horas: ['08:00'], capacidad: '6' })
+  const [newPlantilla, setNewPlantilla] = useState({
+    actividad_id: '', dias_semana: [] as number[],
+    hora_desde: '08:00', hora_hasta: '16:00', intervalo: '60', capacidad: '6'
+  })
 
   // Edit plantilla
   const [editingPlantillaId, setEditingPlantillaId] = useState<number | null>(null)
@@ -72,7 +117,6 @@ export default function DisponibilidadAdmin() {
     if (actsRes.success) setActividades(actsRes.data.filter(a => a.activa))
     if (plantRes.success) setPlantillas(plantRes.data)
 
-    // Load slots for the week
     const promises = weekDates.map(d => getDisponibilidad({ fecha: d }))
     const results = await Promise.all(promises)
     const allSlots: Slot[] = []
@@ -89,19 +133,56 @@ export default function DisponibilidadAdmin() {
 
   const goToday = () => setCurrentDate(new Date().toISOString().split('T')[0])
 
-  const handleCreateSlot = async () => {
-    if (!newSlot.actividad_id || !newSlot.fecha || !newSlot.hora) return
+  // ── Bulk create slots ──
+  const handleBulkCreate = async () => {
+    if (!bulkForm.actividad_id || !bulkForm.fecha_desde) return
+    setCreating(true)
+    setResult(null)
+
+    const fechaHasta = bulkForm.fecha_hasta || bulkForm.fecha_desde
+    const dates = getDatesBetween(bulkForm.fecha_desde, fechaHasta)
+    const times = generateTimeSlots(bulkForm.hora_desde, bulkForm.hora_hasta, parseInt(bulkForm.intervalo) || 60)
+
+    let created = 0
+    let errors = 0
+
+    for (const fecha of dates) {
+      for (const hora of times) {
+        try {
+          const res = await createSlot({
+            actividad_id: parseInt(bulkForm.actividad_id),
+            fecha, hora,
+            capacidad: parseInt(bulkForm.capacidad) || 6,
+          })
+          if (res.success) created++
+          else errors++
+        } catch { errors++ }
+      }
+    }
+
+    if (created > 0) {
+      setResult({ type: 'success', message: `✅ ${created} horarios creados${errors > 0 ? ` (${errors} duplicados omitidos)` : ''}` })
+      setShowNewSlot(false)
+      loadData()
+    } else {
+      setResult({ type: 'error', message: errors > 0 ? '⚠️ Todos los horarios ya existen' : 'Error al crear horarios' })
+    }
+    setCreating(false)
+  }
+
+  // ── Quick-add from calendar cell click ──
+  const handleQuickAdd = async () => {
+    if (!quickAdd) return
     try {
       const res = await createSlot({
-        actividad_id: parseInt(newSlot.actividad_id),
-        fecha: newSlot.fecha,
-        hora: newSlot.hora,
-        capacidad: parseInt(newSlot.capacidad) || 6,
+        actividad_id: quickAdd.actividad_id,
+        fecha: quickAdd.fecha,
+        hora: quickHora,
+        capacidad: parseInt(quickCapacidad) || 6,
       })
       if (res.success) {
-        setResult({ type: 'success', message: '✅ Slot creado correctamente' })
-        setShowNewSlot(false)
-        setNewSlot({ actividad_id: '', fecha: '', hora: '08:00', capacidad: '6' })
+        setResult({ type: 'success', message: '✅ Horario creado' })
+        setQuickAdd(null)
         loadData()
       } else {
         setResult({ type: 'error', message: res.error?.message || 'Error' })
@@ -109,6 +190,7 @@ export default function DisponibilidadAdmin() {
     } catch { setResult({ type: 'error', message: 'Error de conexión' }) }
   }
 
+  // ── Edit slot inline ──
   const handleEditSlot = (slot: Slot) => {
     setEditingSlotId(slot.id)
     setEditSlotData({ hora: slot.hora, capacidad: String(slot.capacidad) })
@@ -134,18 +216,20 @@ export default function DisponibilidadAdmin() {
   }
 
   const handleDeleteSlot = async (id: number) => {
-    if (!confirm('¿Eliminar este slot?')) return
+    if (!confirm('¿Eliminar este horario?')) return
     const res = await deleteSlot(id)
     if (res.success) loadData()
   }
 
+  // ── Plantilla CRUD ──
   const handleCreatePlantilla = async () => {
-    if (!newPlantilla.actividad_id || newPlantilla.dias_semana.length === 0 || newPlantilla.horas.length === 0) return
-    try {
-      let created = 0
-      let errors = 0
-      for (const dia of newPlantilla.dias_semana) {
-        for (const hora of newPlantilla.horas) {
+    if (!newPlantilla.actividad_id || newPlantilla.dias_semana.length === 0) return
+    const times = generateTimeSlots(newPlantilla.hora_desde, newPlantilla.hora_hasta, parseInt(newPlantilla.intervalo) || 60)
+    let created = 0
+    let errors = 0
+    for (const dia of newPlantilla.dias_semana) {
+      for (const hora of times) {
+        try {
           const res = await createPlantilla({
             actividad_id: parseInt(newPlantilla.actividad_id),
             dia_semana: dia,
@@ -154,29 +238,24 @@ export default function DisponibilidadAdmin() {
           })
           if (res.success) created++
           else errors++
-        }
+        } catch { errors++ }
       }
-      if (created > 0) {
-        setResult({ type: 'success', message: `✅ ${created} plantilla${created > 1 ? 's' : ''} creada${created > 1 ? 's' : ''}${errors > 0 ? ` (${errors} errores)` : ''}` })
-        setShowNewPlantilla(false)
-        setNewPlantilla({ actividad_id: '', dias_semana: [], horas: ['08:00'], capacidad: '6' })
-        loadData()
-      } else {
-        setResult({ type: 'error', message: 'Error al crear plantillas' })
-      }
-    } catch { setResult({ type: 'error', message: 'Error de conexión' }) }
+    }
+    if (created > 0) {
+      setResult({ type: 'success', message: `✅ ${created} plantilla${created > 1 ? 's' : ''} creada${created > 1 ? 's' : ''}${errors > 0 ? ` (${errors} errores)` : ''}` })
+      setShowNewPlantilla(false)
+      setNewPlantilla({ actividad_id: '', dias_semana: [], hora_desde: '08:00', hora_hasta: '16:00', intervalo: '60', capacidad: '6' })
+      loadData()
+    } else {
+      setResult({ type: 'error', message: 'Error al crear plantillas' })
+    }
   }
 
   const handleDeletePlantilla = async (id: number) => {
     if (!confirm('¿Eliminar esta plantilla?')) return
     try {
       const res = await deletePlantilla(id)
-      if (res.success) {
-        setResult({ type: 'success', message: '✅ Plantilla eliminada' })
-        loadData()
-      } else {
-        setResult({ type: 'error', message: res.error?.message || 'Error al eliminar' })
-      }
+      if (res.success) { setResult({ type: 'success', message: '✅ Plantilla eliminada' }); loadData() }
     } catch { setResult({ type: 'error', message: 'Error de conexión' }) }
   }
 
@@ -190,8 +269,6 @@ export default function DisponibilidadAdmin() {
         setEditingPlantillaId(null)
         setResult({ type: 'success', message: '✅ Plantilla actualizada' })
         loadData()
-      } else {
-        setResult({ type: 'error', message: res.error?.message || 'Error al actualizar' })
       }
     } catch { setResult({ type: 'error', message: 'Error de conexión' }) }
   }
@@ -201,7 +278,7 @@ export default function DisponibilidadAdmin() {
     try {
       const res = await generarSlotsMes({ mes: genMonth })
       if (res.success) {
-        setResult({ type: 'success', message: `✅ ${res.data.created} slots generados para ${genMonth}` })
+        setResult({ type: 'success', message: `✅ ${res.data.created} horarios generados para ${genMonth}` })
         loadData()
       } else {
         setResult({ type: 'error', message: res.error?.message || 'Error' })
@@ -211,6 +288,15 @@ export default function DisponibilidadAdmin() {
   }
 
   const getActName = (id: number) => actividades.find(a => a.id === id)?.nombre || `#${id}`
+
+  // Preview for bulk form
+  const bulkPreview = (() => {
+    if (!bulkForm.fecha_desde) return null
+    const fechaHasta = bulkForm.fecha_hasta || bulkForm.fecha_desde
+    const dates = getDatesBetween(bulkForm.fecha_desde, fechaHasta)
+    const times = generateTimeSlots(bulkForm.hora_desde, bulkForm.hora_hasta, parseInt(bulkForm.intervalo) || 60)
+    return { dias: dates.length, horas: times.length, total: dates.length * times.length, times }
+  })()
 
   if (loading) {
     return <div className="flex items-center justify-center h-60"><Loader2 className="w-8 h-8 animate-spin text-turquoise-600" /></div>
@@ -225,10 +311,10 @@ export default function DisponibilidadAdmin() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setTab('semana')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'semana' ? 'bg-turquoise-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            <Calendar className="w-4 h-4 inline mr-1.5" /> Vista Semanal
+            <Calendar className="w-4 h-4 inline mr-1.5" />Vista Semanal
           </button>
           <button onClick={() => setTab('plantillas')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'plantillas' ? 'bg-turquoise-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-            <Clock className="w-4 h-4 inline mr-1.5" /> Plantillas
+            <Clock className="w-4 h-4 inline mr-1.5" />Plantillas
           </button>
         </div>
       </div>
@@ -244,7 +330,7 @@ export default function DisponibilidadAdmin() {
 
       {tab === 'semana' && (
         <>
-          {/* Week navigation — improved */}
+          {/* Week navigation */}
           <div className="flex items-center justify-between bg-white rounded-xl p-3 shadow-sm border border-gray-100">
             <button onClick={() => navigateWeek(-1)} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
               <ChevronLeft className="w-5 h-5 text-gray-600" />
@@ -261,7 +347,7 @@ export default function DisponibilidadAdmin() {
             </div>
           </div>
 
-          {/* Slots grid */}
+          {/* Calendar grid — clickable empty cells */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
             <table className="w-full min-w-[700px]">
               <thead>
@@ -285,6 +371,7 @@ export default function DisponibilidadAdmin() {
                       <td className="px-3 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">{act.nombre}</td>
                       {weekDates.map(d => {
                         const daySlots = actSlots.filter(s => s.fecha === d)
+                        const isQuickAdding = quickAdd?.actividad_id === act.id && quickAdd?.fecha === d
                         return (
                           <td key={d} className="px-1 py-1 align-top">
                             {daySlots.length > 0 ? (
@@ -334,9 +421,47 @@ export default function DisponibilidadAdmin() {
                                     </div>
                                   )
                                 })}
+                                {/* Add more to this cell */}
+                                {!isQuickAdding && (
+                                  <button onClick={() => { setQuickAdd({ actividad_id: act.id, fecha: d }); setQuickHora('08:00'); setQuickCapacidad('6') }}
+                                    className="w-full text-[10px] text-turquoise-400 hover:text-turquoise-600 hover:bg-turquoise-50 rounded py-0.5 transition-colors flex items-center justify-center gap-0.5">
+                                    <Plus className="w-2.5 h-2.5" /> más
+                                  </button>
+                                )}
                               </div>
                             ) : (
-                              <div className="text-center text-gray-300 text-xs py-2">—</div>
+                              /* Empty cell — clickable to add */
+                              !isQuickAdding ? (
+                                <button
+                                  onClick={() => { setQuickAdd({ actividad_id: act.id, fecha: d }); setQuickHora('08:00'); setQuickCapacidad('6') }}
+                                  className="w-full py-3 text-center text-gray-300 hover:text-turquoise-500 hover:bg-turquoise-50 rounded-lg transition-all group cursor-pointer"
+                                  title="Click para agregar horario"
+                                >
+                                  <Plus className="w-4 h-4 mx-auto opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </button>
+                              ) : null
+                            )}
+
+                            {/* Quick-add inline form */}
+                            {isQuickAdding && (
+                              <div className="text-[11px] px-1.5 py-1.5 rounded bg-turquoise-50 border border-turquoise-200 space-y-1">
+                                <input type="time" value={quickHora} onChange={e => setQuickHora(e.target.value)}
+                                  className="w-full px-1 py-0.5 border border-gray-200 rounded text-[10px]" autoFocus />
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[9px] text-gray-500">Cupos:</span>
+                                  <input type="number" value={quickCapacidad} min="1"
+                                    onChange={e => setQuickCapacidad(e.target.value)}
+                                    className="w-12 px-1 py-0.5 border border-gray-200 rounded text-[10px]" />
+                                </div>
+                                <div className="flex items-center gap-0.5">
+                                  <button onClick={handleQuickAdd} className="p-0.5 bg-turquoise-500 text-white rounded hover:bg-turquoise-600" title="Crear">
+                                    <Save className="w-3 h-3" />
+                                  </button>
+                                  <button onClick={() => setQuickAdd(null)} className="p-0.5 bg-gray-300 text-white rounded hover:bg-gray-400" title="Cancelar">
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
                             )}
                           </td>
                         )
@@ -348,41 +473,92 @@ export default function DisponibilidadAdmin() {
             </table>
           </div>
 
-          {/* Add slot — improved panel */}
+          {/* Bulk add panel */}
           <div>
             <button onClick={() => setShowNewSlot(!showNewSlot)} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium shadow-sm transition-all ${showNewSlot ? 'bg-gray-200 text-gray-700' : 'bg-turquoise-600 text-white hover:bg-turquoise-700'}`}>
-              {showNewSlot ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showNewSlot ? 'Cerrar' : 'Agregar Horario'}
+              {showNewSlot ? <X className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+              {showNewSlot ? 'Cerrar' : 'Crear Horarios en Lote'}
             </button>
           </div>
 
           {showNewSlot && (
             <div className="bg-white rounded-xl shadow-md p-5 border border-turquoise-100 space-y-4">
-              <h3 className="font-semibold text-azul-900 text-sm">Nuevo horario</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <h3 className="font-semibold text-azul-900 text-sm flex items-center gap-2">
+                <Zap className="w-4 h-4 text-turquoise-600" /> Crear Horarios en Lote
+              </h3>
+              <p className="text-xs text-gray-500">Crea múltiples horarios de una sola vez: selecciona rango de fechas + intervalo de horas.</p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Actividad</label>
-                  <select value={newSlot.actividad_id} onChange={e => setNewSlot({ ...newSlot, actividad_id: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Actividad *</label>
+                  <select value={bulkForm.actividad_id} onChange={e => setBulkForm({ ...bulkForm, actividad_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500">
                     <option value="">Seleccionar...</option>
                     {actividades.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
-                  <input type="date" value={newSlot.fecha} onChange={e => setNewSlot({ ...newSlot, fecha: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Fecha desde *</label>
+                  <input type="date" value={bulkForm.fecha_desde} onChange={e => setBulkForm({ ...bulkForm, fecha_desde: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora</label>
-                  <input type="time" value={newSlot.hora} onChange={e => setNewSlot({ ...newSlot, hora: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Cupos</label>
-                  <input type="number" value={newSlot.capacidad} min="1" onChange={e => setNewSlot({ ...newSlot, capacidad: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Fecha hasta</label>
+                  <input type="date" value={bulkForm.fecha_hasta}
+                    min={bulkForm.fecha_desde}
+                    onChange={e => setBulkForm({ ...bulkForm, fecha_hasta: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                  <p className="text-[10px] text-gray-400 mt-0.5">Vacío = solo la fecha "desde"</p>
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora desde</label>
+                  <input type="time" value={bulkForm.hora_desde} onChange={e => setBulkForm({ ...bulkForm, hora_desde: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Hora hasta</label>
+                  <input type="time" value={bulkForm.hora_hasta} onChange={e => setBulkForm({ ...bulkForm, hora_hasta: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Intervalo</label>
+                  <select value={bulkForm.intervalo} onChange={e => setBulkForm({ ...bulkForm, intervalo: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500">
+                    <option value="30">Cada 30 min</option>
+                    <option value="60">Cada 1 hora</option>
+                    <option value="90">Cada 1.5 horas</option>
+                    <option value="120">Cada 2 horas</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Cupos por horario</label>
+                  <input type="number" value={bulkForm.capacidad} min="1"
+                    onChange={e => setBulkForm({ ...bulkForm, capacidad: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                </div>
+              </div>
+
+              {/* Preview */}
+              {bulkPreview && (
+                <div className="bg-turquoise-50 rounded-lg p-3 border border-turquoise-100">
+                  <p className="text-xs font-medium text-turquoise-800">
+                    📋 Se crearán <strong>{bulkPreview.total}</strong> horarios
+                    ({bulkPreview.dias} día{bulkPreview.dias > 1 ? 's' : ''} × {bulkPreview.horas} hora{bulkPreview.horas > 1 ? 's' : ''})
+                  </p>
+                  <p className="text-[10px] text-turquoise-600 mt-0.5">
+                    Horas: {bulkPreview.times.join(', ')}
+                  </p>
+                </div>
+              )}
+
               <div className="flex justify-end">
-                <button onClick={handleCreateSlot} disabled={!newSlot.actividad_id || !newSlot.fecha} className="px-5 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 shadow-sm">
-                  Crear Horario
+                <button onClick={handleBulkCreate} disabled={!bulkForm.actividad_id || !bulkForm.fecha_desde || creating}
+                  className="px-5 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 shadow-sm flex items-center gap-2">
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                  {creating ? 'Creando...' : 'Crear Horarios'}
                 </button>
               </div>
             </div>
@@ -392,25 +568,29 @@ export default function DisponibilidadAdmin() {
 
       {tab === 'plantillas' && (
         <>
-          {/* Info box explaining templates */}
+          {/* Info box */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
             <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
             <div className="text-sm text-blue-800">
               <p className="font-medium mb-1">¿Qué son las plantillas?</p>
-              <p>Las plantillas definen los horarios recurrentes de cada actividad. Por ejemplo: "Surf todos los Lunes a las 8:00am con 6 cupos". Al <strong>Generar Horarios</strong> de un mes, el sistema crea automáticamente los slots de disponibilidad basándose en estas plantillas.</p>
+              <p>Las plantillas definen horarios recurrentes. Ej: "Surf los Lunes de 8:00 a 14:00 cada hora". Al <strong>Generar Horarios</strong> se crean los slots para todo el mes seleccionado.</p>
             </div>
           </div>
 
-          {/* Generate month — improved */}
-          <div className="bg-gradient-to-r from-turquoise-50 to-blue-50 rounded-xl p-5 border border-turquoise-100">
+          {/* Generate month — prominent */}
+          <div className="bg-gradient-to-r from-turquoise-50 to-blue-50 rounded-xl p-5 border border-turquoise-200 shadow-sm">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
-                <p className="font-semibold text-turquoise-900 text-sm">Generar Horarios del Mes</p>
-                <p className="text-xs text-turquoise-700 mt-0.5">Crea slots automáticamente desde las plantillas activas para el mes seleccionado</p>
+                <p className="font-semibold text-turquoise-900 text-sm flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-turquoise-600" /> Generar Horarios del Mes
+                </p>
+                <p className="text-xs text-turquoise-700 mt-0.5">Aplica las plantillas activas al mes seleccionado — crea todos los slots automáticamente</p>
               </div>
               <div className="flex items-center gap-2">
-                <input type="month" value={genMonth} onChange={e => setGenMonth(e.target.value)} className="px-3 py-2 border border-turquoise-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
-                <button onClick={handleGenerate} disabled={generating} className="px-5 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 flex items-center gap-2 shadow-sm">
+                <input type="month" value={genMonth} onChange={e => setGenMonth(e.target.value)}
+                  className="px-3 py-2 border border-turquoise-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                <button onClick={handleGenerate} disabled={generating}
+                  className="px-5 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 flex items-center gap-2 shadow-sm">
                   {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
                   Generar
                 </button>
@@ -418,7 +598,7 @@ export default function DisponibilidadAdmin() {
             </div>
           </div>
 
-          {/* Plantillas list — improved with edit/delete */}
+          {/* Plantillas list */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <div>
@@ -433,7 +613,7 @@ export default function DisponibilidadAdmin() {
 
             {showNewPlantilla && (
               <div className="p-4 bg-turquoise-50/50 border-b border-turquoise-100 space-y-3">
-                <p className="text-xs font-medium text-gray-600">Nueva plantilla semanal</p>
+                <p className="text-xs font-medium text-gray-600">Nueva plantilla semanal con intervalos</p>
                 {/* Row 1: Actividad + Cupos */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <select value={newPlantilla.actividad_id} onChange={e => setNewPlantilla({ ...newPlantilla, actividad_id: e.target.value })} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500">
@@ -442,7 +622,7 @@ export default function DisponibilidadAdmin() {
                   </select>
                   <input type="number" value={newPlantilla.capacidad} onChange={e => setNewPlantilla({ ...newPlantilla, capacidad: e.target.value })} placeholder="Cupos" min="1" className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
                 </div>
-                {/* Row 2: Días — multi-select chips */}
+                {/* Row 2: Days chips */}
                 <div>
                   <p className="text-[11px] font-medium text-gray-500 mb-1.5">Días de la semana</p>
                   <div className="flex flex-wrap gap-1.5">
@@ -461,41 +641,41 @@ export default function DisponibilidadAdmin() {
                     })}
                   </div>
                 </div>
-                {/* Row 3: Horarios — multiple time inputs */}
-                <div>
-                  <p className="text-[11px] font-medium text-gray-500 mb-1.5">Horarios</p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {newPlantilla.horas.map((h, idx) => (
-                      <div key={idx} className="flex items-center gap-1">
-                        <input type="time" value={h}
-                          onChange={e => setNewPlantilla(prev => {
-                            const horas = [...prev.horas]
-                            horas[idx] = e.target.value
-                            return { ...prev, horas }
-                          })}
-                          className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
-                        {newPlantilla.horas.length > 1 && (
-                          <button type="button" onClick={() => setNewPlantilla(prev => ({ ...prev, horas: prev.horas.filter((_, i) => i !== idx) }))}
-                            className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => setNewPlantilla(prev => ({ ...prev, horas: [...prev.horas, '09:00'] }))}
-                      className="px-2.5 py-1.5 text-xs font-medium bg-white border border-dashed border-turquoise-300 text-turquoise-600 rounded-lg hover:bg-turquoise-50 transition-colors flex items-center gap-1">
-                      <Plus className="w-3 h-3" /> Horario
-                    </button>
+                {/* Row 3: Time interval */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-500 mb-1">Hora desde</label>
+                    <input type="time" value={newPlantilla.hora_desde} onChange={e => setNewPlantilla({ ...newPlantilla, hora_desde: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-500 mb-1">Hora hasta</label>
+                    <input type="time" value={newPlantilla.hora_hasta} onChange={e => setNewPlantilla({ ...newPlantilla, hora_hasta: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-turquoise-500" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-gray-500 mb-1">Intervalo</label>
+                    <select value={newPlantilla.intervalo} onChange={e => setNewPlantilla({ ...newPlantilla, intervalo: e.target.value })}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-turquoise-500">
+                      <option value="30">30 min</option>
+                      <option value="60">1 hora</option>
+                      <option value="90">1.5 horas</option>
+                      <option value="120">2 horas</option>
+                    </select>
                   </div>
                 </div>
-                {/* Summary + Create */}
+                {/* Preview + create */}
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] text-gray-400">
-                    {newPlantilla.dias_semana.length > 0 && newPlantilla.horas.length > 0
-                      ? `Se crearán ${newPlantilla.dias_semana.length * newPlantilla.horas.length} plantilla(s)`
-                      : 'Selecciona días y horarios'}
+                    {newPlantilla.dias_semana.length > 0
+                      ? (() => {
+                          const times = generateTimeSlots(newPlantilla.hora_desde, newPlantilla.hora_hasta, parseInt(newPlantilla.intervalo) || 60)
+                          return `${newPlantilla.dias_semana.length} día(s) × ${times.length} hora(s) = ${newPlantilla.dias_semana.length * times.length} plantilla(s) — Horas: ${times.join(', ')}`
+                        })()
+                      : 'Selecciona días'}
                   </p>
-                  <button onClick={handleCreatePlantilla} disabled={!newPlantilla.actividad_id || newPlantilla.dias_semana.length === 0} className="px-5 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 shadow-sm">
+                  <button onClick={handleCreatePlantilla} disabled={!newPlantilla.actividad_id || newPlantilla.dias_semana.length === 0}
+                    className="px-5 py-2 bg-turquoise-600 text-white rounded-lg text-sm font-medium hover:bg-turquoise-700 disabled:opacity-50 shadow-sm">
                     Crear Plantillas
                   </button>
                 </div>
@@ -509,7 +689,6 @@ export default function DisponibilidadAdmin() {
                 <p className="text-sm mt-1">Crea una plantilla para poder generar horarios automáticamente cada mes</p>
               </div>
             ) : (() => {
-              // Group plantillas by actividad
               const grouped = plantillas.reduce((acc, p) => {
                 const key = p.actividad_id
                 if (!acc[key]) acc[key] = []
@@ -521,14 +700,12 @@ export default function DisponibilidadAdmin() {
                 <div className="divide-y divide-gray-100">
                   {Object.entries(grouped).map(([actId, items]) => {
                     const actName = getActName(Number(actId))
-                    // Group by day
                     const byDay = items.reduce((acc, p) => {
                       if (!acc[p.dia_semana]) acc[p.dia_semana] = []
                       acc[p.dia_semana].push(p)
                       return acc
                     }, {} as Record<number, Plantilla[]>)
 
-                    // Sort days
                     const sortedDays = Object.keys(byDay).map(Number).sort()
 
                     return (
