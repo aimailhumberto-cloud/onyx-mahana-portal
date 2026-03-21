@@ -618,7 +618,7 @@ export interface Usuario {
   id: number
   email: string
   nombre: string
-  rol: 'admin' | 'partner'
+  rol: 'admin' | 'partner' | 'vendedor'
   vendedor: string | null
   activo: number
   created_at: string

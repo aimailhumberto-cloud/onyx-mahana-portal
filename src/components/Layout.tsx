@@ -21,16 +21,19 @@ const navigation = [
   { name: 'Tours', href: '/tours', icon: Calendar },
   { name: 'Estadías', href: '/estadias', icon: Building2 },
   { name: 'Calendario', href: '/calendario', icon: CalendarDays },
-  { name: 'Productos', href: '/productos', icon: Package },
-  { name: 'Disponibilidad', href: '/disponibilidad', icon: Clock },
-  { name: 'Notificaciones', href: '/notificaciones', icon: Bell },
-  { name: 'Usuarios', href: '/usuarios', icon: Users },
-  { name: 'Admin', href: '/admin', icon: Settings },
+  { name: 'Productos', href: '/productos', icon: Package, adminOnly: true },
+  { name: 'Disponibilidad', href: '/disponibilidad', icon: Clock, adminOnly: true },
+  { name: 'Notificaciones', href: '/notificaciones', icon: Bell, adminOnly: true },
+  { name: 'Usuarios', href: '/usuarios', icon: Users, adminOnly: true },
+  { name: 'Admin', href: '/admin', icon: Settings, adminOnly: true },
 ]
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { user, logout } = useAuth()
+
+  const isAdmin = user?.rol === 'admin'
+  const visibleNav = navigation.filter(n => !n.adminOnly || isAdmin)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -62,7 +65,7 @@ export default function Layout() {
 
         {/* Navigation */}
         <nav className="px-3 py-4 space-y-1">
-          {navigation.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink
               key={item.name}
               to={item.href}
@@ -90,7 +93,7 @@ export default function Layout() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-medium truncate text-sm">{user?.nombre || 'Mahana Tours'}</p>
-              <p className="text-xs text-gray-400">{user?.rol === 'admin' ? 'Administrador' : 'Partner'}</p>
+              <p className="text-xs text-gray-400">{user?.rol === 'admin' ? 'Administrador' : user?.rol === 'vendedor' ? 'Vendedor' : 'Partner'}</p>
             </div>
             <button 
               onClick={logout}

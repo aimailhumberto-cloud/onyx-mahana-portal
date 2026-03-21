@@ -1106,8 +1106,8 @@ app.post('/api/v1/usuarios', requireAuth, requireRole('admin'), (req, res) => {
     if (!email || !password || !nombre || !rol) {
       return error(res, 'VALIDATION_ERROR', 'Email, contraseña, nombre y rol son requeridos', 400);
     }
-    if (!['admin', 'partner'].includes(rol)) {
-      return error(res, 'VALIDATION_ERROR', 'Rol debe ser "admin" o "partner"', 400);
+    if (!['admin', 'partner', 'vendedor'].includes(rol)) {
+      return error(res, 'VALIDATION_ERROR', 'Rol debe ser "admin", "partner" o "vendedor"', 400);
     }
     if (password.length < 6) {
       return error(res, 'VALIDATION_ERROR', 'La contraseña debe tener al menos 6 caracteres', 400);
@@ -1143,7 +1143,7 @@ app.put('/api/v1/usuarios/:id', requireAuth, requireRole('admin'), (req, res) =>
 
     if (email) updates.email = email.toLowerCase().trim();
     if (nombre) updates.nombre = sanitize(nombre);
-    if (rol && ['admin', 'partner'].includes(rol)) updates.rol = rol;
+    if (rol && ['admin', 'partner', 'vendedor'].includes(rol)) updates.rol = rol;
     if (vendedor !== undefined) updates.vendedor = vendedor ? sanitize(vendedor) : null;
     if (password && password.length >= 6) updates.password_hash = hashPassword(password);
 

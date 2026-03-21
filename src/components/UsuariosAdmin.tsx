@@ -7,7 +7,7 @@ interface UserForm {
   email: string
   password: string
   nombre: string
-  rol: 'admin' | 'partner'
+  rol: 'admin' | 'partner' | 'vendedor'
   vendedor: string
 }
 
@@ -157,9 +157,10 @@ export default function UsuariosAdmin() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
-              <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value as 'admin' | 'partner' })}
+              <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value as 'admin' | 'partner' | 'vendedor' })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 text-sm">
                 <option value="admin">Administrador (Mahana)</option>
+                <option value="vendedor">Vendedor (Mahana)</option>
                 <option value="partner">Partner (Caracol / Hotel)</option>
               </select>
             </div>

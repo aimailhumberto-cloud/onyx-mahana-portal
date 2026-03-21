@@ -5,7 +5,7 @@ export interface User {
   id: number
   email: string
   nombre: string
-  rol: 'admin' | 'partner'
+  rol: 'admin' | 'partner' | 'vendedor'
   vendedor: string | null
 }
 
