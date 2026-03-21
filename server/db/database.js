@@ -93,21 +93,7 @@ function getDb() {
     // Rename Cancelada → Perdida in existing data
     db.prepare(`UPDATE reservas_estadias SET estado = 'Perdida' WHERE estado = 'Cancelada'`).run();
 
-    // ── Actividades: expand with product catalog fields ──
-    addCol('actividades', 'categoria', 'TEXT');
-    addCol('actividades', 'descripcion', 'TEXT');
-    addCol('actividades', 'unidad', 'TEXT');          // "Por pax", "Por bote"
-    addCol('actividades', 'duracion', 'TEXT');         // "2 horas", "Full day"
-    addCol('actividades', 'horario', 'TEXT');           // "8:00am, 2:00pm"
-    addCol('actividades', 'punto_encuentro', 'TEXT');
-    addCol('actividades', 'que_incluye', 'TEXT');       // "Water, Equipo, Foto"
-    addCol('actividades', 'que_llevar', 'TEXT');        // "Bloqueador, Toalla"
-    addCol('actividades', 'requisitos', 'TEXT');
-    addCol('actividades', 'disponibilidad', 'TEXT');    // "Todo el año"
-    addCol('actividades', 'costo_instructor', 'REAL');
-    addCol('actividades', 'comision_caracol_pct', 'REAL');
-    addCol('actividades', 'capacidad_max', 'INTEGER');
-    addCol('actividades', 'transporte', 'INTEGER');
+    // (actividades columns already added above at lines 49-65)
 
     // Ensure actividades catalog has Otro and Academia de Surf
     const ensureAct = (nombre) => {

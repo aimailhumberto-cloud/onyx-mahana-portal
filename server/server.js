@@ -35,7 +35,11 @@ const API_KEY = process.env.API_KEY || 'mahana-dev-key-2026';
 
 // ── Middleware ──
 
-app.use(cors({ origin: true, credentials: true }));
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
+app.use(cors({
+  origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : true,
+  credentials: true
+}));
 app.use(express.json());
 app.use('/uploads', express.static(uploadsDir));
 
@@ -112,62 +116,7 @@ app.get('/api/v1/api-status', (req, res) => {
   });
 });
 
-// TEMPORARY DEBUG: check users in DB (remove in production)
-app.get('/api/v1/debug-users', requireApiKey, (req, res) => {
-  try {
-    const db = getDb();
-    const users = db.prepare('SELECT id, email, nombre, rol, vendedor, activo FROM usuarios').all();
-    const dbPath = db.name;
-    const testHash = require('bcryptjs').hashSync('test123', 10);
-    const testVerify = require('bcryptjs').compareSync('test123', testHash);
-    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='usuarios'").get();
-    success(res, { dbPath, users, count: users.length, bcryptWorks: testVerify, tableSchema: tableInfo?.sql });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
-  }
-});
-
-// TEMPORARY: POST to seed users on demand
-app.post('/api/v1/debug-seed', requireApiKey, (req, res) => {
-  try {
-    const bcrypt = require('bcryptjs');
-    const db = getDb();
-    const steps = [];
-    
-    // Step 1: Check current state
-    const before = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
-    steps.push(`Before: ${before.c} users`);
-    
-    // Step 2: Delete all
-    const delResult = db.prepare('DELETE FROM usuarios').run();
-    steps.push(`Deleted: ${delResult.changes} rows`);
-    
-    // Step 3: Hash passwords
-    const h1 = bcrypt.hashSync('mahana2026', 10);
-    const h2 = bcrypt.hashSync('caracol2026', 10);
-    steps.push(`Hashed: h1=${h1.substring(0,20)}... h2=${h2.substring(0,20)}...`);
-    
-    // Step 4: Insert
-    const ins1 = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('admin@mahana.com', h1, 'Mahana Admin', 'admin', null);
-    steps.push(`Insert1: lastInsertRowid=${ins1.lastInsertRowid}, changes=${ins1.changes}`);
-    
-    const ins2 = db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('caracol@playacaracol.com', h2, 'Playa Caracol', 'partner', 'Playa Caracol');
-    steps.push(`Insert2: lastInsertRowid=${ins2.lastInsertRowid}, changes=${ins2.changes}`);
-    
-    // Step 5: Verify
-    const after = db.prepare('SELECT id, email, nombre, rol, activo FROM usuarios').all();
-    steps.push(`After: ${after.length} users`);
-    
-    // Step 6: Test login
-    const admin = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get('admin@mahana.com');
-    const loginWorks = admin ? bcrypt.compareSync('mahana2026', admin.password_hash) : false;
-    steps.push(`Login test: user_found=${!!admin}, password_match=${loginWorks}`);
-    
-    success(res, { steps, users: after, loginWorks });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message, stack: err.stack });
-  }
-});
+// Debug endpoints removed for security (audit 2026-03-20)
 
 // ══════════════════════════════════════
 // AUTH ENDPOINTS
@@ -273,7 +222,7 @@ app.get('/api/v1/tours/deleted', requireAuth, requireRole('admin'), (req, res) =
   }
 });
 
-app.get('/api/v1/tours/:id', (req, res) => {
+app.get('/api/v1/tours/:id', requireAuth, (req, res) => {
   try {
     const tour = findById('reservas_tours', req.params.id);
     if (!tour) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
@@ -410,7 +359,7 @@ app.post('/api/v1/tours', requireAuth, (req, res) => {
   }
 });
 
-app.put('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.put('/api/v1/tours/:id', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
   try {
     const existing = findById('reservas_tours', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
@@ -447,7 +396,7 @@ app.put('/api/v1/tours/:id', requireAuth, requireRole('admin'), (req, res) => {
   }
 });
 
-app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin'), (req, res) => {
+app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
   try {
     const { estatus } = req.body;
     if (!estatus) return error(res, 'VALIDATION_ERROR', 'Field "estatus" is required', 400, ['estatus']);
@@ -483,7 +432,7 @@ app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin'), (req, r
 // ESTADÍAS ENDPOINTS
 // ══════════════════════════════════════
 
-app.get('/api/v1/estadias', (req, res) => {
+app.get('/api/v1/estadias', requireAuth, (req, res) => {
   try {
     const { estado, propiedad, responsable, cliente, check_in_desde, check_in_hasta, page = 1, limit = 50 } = req.query;
     const where = {};
@@ -502,7 +451,7 @@ app.get('/api/v1/estadias', (req, res) => {
   }
 });
 
-app.get('/api/v1/estadias/:id', (req, res) => {
+app.get('/api/v1/estadias/:id', requireAuth, (req, res) => {
   try {
     const estadia = findById('reservas_estadias', req.params.id);
     if (!estadia) return error(res, 'NOT_FOUND', `Estadia ${req.params.id} not found`, 404);
@@ -1823,7 +1772,7 @@ app.get('/api/v1/disponibilidad/semana', requireAuth, (req, res) => {
 });
 
 // Create a slot
-app.post('/api/v1/slots', requireAuth, requireRole('admin'), (req, res) => {
+app.post('/api/v1/slots', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
   try {
     const { actividad_id, fecha, hora, capacidad = 6 } = req.body;
     if (!actividad_id || !fecha || !hora) {
@@ -1848,13 +1797,13 @@ app.post('/api/v1/slots', requireAuth, requireRole('admin'), (req, res) => {
 });
 
 // Update a slot (capacity, block, notes)
-app.put('/api/v1/slots/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.put('/api/v1/slots/:id', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
   try {
     const existing = findById('horarios_slots', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', 'Slot not found', 404);
 
     const data = {};
-    const allowed = ['capacidad', 'bloqueado', 'notas'];
+    const allowed = ['hora', 'capacidad', 'bloqueado', 'notas'];
     for (const field of allowed) {
       if (req.body[field] !== undefined) {
         data[field] = req.body[field];
@@ -1869,7 +1818,7 @@ app.put('/api/v1/slots/:id', requireAuth, requireRole('admin'), (req, res) => {
 });
 
 // Delete a slot
-app.delete('/api/v1/slots/:id', requireAuth, requireRole('admin'), (req, res) => {
+app.delete('/api/v1/slots/:id', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
   try {
     const removed = remove('horarios_slots', req.params.id);
     if (!removed) return error(res, 'NOT_FOUND', 'Slot not found', 404);

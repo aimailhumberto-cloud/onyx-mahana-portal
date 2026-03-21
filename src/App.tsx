@@ -59,7 +59,12 @@ function AppRoutes() {
     )
   }
 
-  // Admin routes
+  // Admin + vendedor routes (vendedor has restricted access)
+  const AdminOnly = ({ children }: { children: React.ReactNode }) => {
+    if (!isAdmin) return <Navigate to="/" replace />
+    return <>{children}</>
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
@@ -71,11 +76,11 @@ function AppRoutes() {
         <Route path="estadias/nuevo" element={<EstadiaForm />} />
         <Route path="estadias/:id/editar" element={<EstadiaForm />} />
         <Route path="calendario" element={<CalendarView />} />
-        <Route path="productos" element={<Productos />} />
-        <Route path="disponibilidad" element={<DisponibilidadAdmin />} />
-        <Route path="notificaciones" element={<NotificacionesConfig />} />
-        <Route path="usuarios" element={<UsuariosAdmin />} />
-        <Route path="admin" element={<AdminPanel />} />
+        <Route path="productos" element={<AdminOnly><Productos /></AdminOnly>} />
+        <Route path="disponibilidad" element={<AdminOnly><DisponibilidadAdmin /></AdminOnly>} />
+        <Route path="notificaciones" element={<AdminOnly><NotificacionesConfig /></AdminOnly>} />
+        <Route path="usuarios" element={<AdminOnly><UsuariosAdmin /></AdminOnly>} />
+        <Route path="admin" element={<AdminOnly><AdminPanel /></AdminOnly>} />
       </Route>
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
