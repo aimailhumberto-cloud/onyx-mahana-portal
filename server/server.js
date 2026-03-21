@@ -944,6 +944,16 @@ app.put('/api/v1/partner/tours/:id', requireAuth, (req, res) => {
     );
 
     success(res, updated);
+
+    // Send notifications for re-edited tour (needs re-approval)
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...tour, ...updated, email: updated.email_cliente || tour.email_cliente };
+        await notifications.onTourCreated(fullTour);
+      } catch (err) {
+        console.error('🔔 Notification error (partner edit):', err.message);
+      }
+    });
   } catch (err) {
     console.error('Error updating partner tour:', err);
     error(res, 'SERVER_ERROR', 'Error al actualizar tour', 500);

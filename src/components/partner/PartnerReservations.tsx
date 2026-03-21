@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getTours, getTourById, updatePartnerTour, uploadFile } from '../../api/api'
 import type { Tour } from '../../api/api'
-import { Loader2, Search, Calendar, Filter, ChevronDown, ChevronUp, Edit3, Save, X, AlertTriangle, Upload, Image as ImageIcon } from 'lucide-react'
+import { Loader2, Search, Calendar, Filter, ChevronDown, ChevronUp, Edit3, Save, X, AlertTriangle, Upload, Trash2 } from 'lucide-react'
 
 const STATUS_COLORS: Record<string, string> = {
   'Por Aprobar': 'bg-orange-100 text-orange-800 border-orange-200',
@@ -25,6 +25,12 @@ const STATUS_EMOJI: Record<string, string> = {
   'Cerrado': '⚫',
 }
 
+// Parse comprobante_url which may be comma-separated multiple URLs
+function parseComprobantes(url: string | null | undefined): string[] {
+  if (!url) return []
+  return url.split(',').map(u => u.trim()).filter(Boolean)
+}
+
 export default function PartnerReservations() {
   const [tours, setTours] = useState<Tour[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,9 +44,10 @@ export default function PartnerReservations() {
   const [saveResult, setSaveResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [detailData, setDetailData] = useState<Record<number, any>>({})
 
-  // Comprobante upload for editing
+  // Comprobante upload
   const [newComprobante, setNewComprobante] = useState<File | null>(null)
   const [newComprobantePreview, setNewComprobantePreview] = useState<string | null>(null)
+  const [existingComprobantes, setExistingComprobantes] = useState<string[]>([])
   const editFileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -68,14 +75,10 @@ export default function PartnerReservations() {
     setExpandedId(tourId)
     setEditingId(null)
     setSaveResult(null)
-
-    // Load full detail if not cached
     if (!detailData[tourId]) {
       try {
         const res = await getTourById(tourId)
-        if (res.success) {
-          setDetailData(prev => ({ ...prev, [tourId]: res.data }))
-        }
+        if (res.success) setDetailData(prev => ({ ...prev, [tourId]: res.data }))
       } catch { }
     }
   }
@@ -85,6 +88,7 @@ export default function PartnerReservations() {
     setSaveResult(null)
     setNewComprobante(null)
     setNewComprobantePreview(null)
+    setExistingComprobantes(parseComprobantes(tour.comprobante_url))
     setEditForm({
       cliente: tour.cliente || '',
       whatsapp: tour.whatsapp || '',
@@ -109,27 +113,29 @@ export default function PartnerReservations() {
     }
   }
 
+  const removeExistingComprobante = (index: number) => {
+    setExistingComprobantes(prev => prev.filter((_, i) => i !== index))
+  }
+
   const handleSave = async (tourId: number) => {
     setSaving(true)
     setSaveResult(null)
-
     try {
       const data = { ...editForm }
+      let allComprobantes = [...existingComprobantes]
 
-      // Upload new comprobante if provided
       if (newComprobante) {
         const uploadRes = await uploadFile(newComprobante)
-        if (uploadRes.success) {
-          data.comprobante_url = uploadRes.data.url
-        }
+        if (uploadRes.success) allComprobantes.push(uploadRes.data.url)
       }
+
+      data.comprobante_url = allComprobantes.join(',')
 
       const res = await updatePartnerTour(tourId, data)
       if (res.success) {
         setSaveResult({ type: 'success', message: '✅ Tour actualizado. Estado reiniciado a "Por Aprobar".' })
         setEditingId(null)
         setDetailData(prev => ({ ...prev, [tourId]: res.data }))
-        // Reload list
         loadTours()
       } else {
         setSaveResult({ type: 'error', message: res.error?.message || 'Error al guardar' })
@@ -158,21 +164,14 @@ export default function PartnerReservations() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por cliente o actividad..."
-            value={search}
+          <input type="text" placeholder="Buscar por cliente o actividad..." value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
-          />
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm" />
         </div>
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <select
-            value={statusFilter}
-            onChange={e => setStatusFilter(e.target.value)}
-            className="pl-10 pr-8 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm appearance-none"
-          >
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="pl-10 pr-8 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm appearance-none">
             <option value="">Todos los estados</option>
             <option value="Por Aprobar">🟠 Por Aprobar</option>
             <option value="Aprobado">🔵 Aprobado</option>
@@ -182,7 +181,6 @@ export default function PartnerReservations() {
         </div>
       </div>
 
-      {/* Save result toast */}
       {saveResult && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm ${saveResult.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
           <span>{saveResult.message}</span>
@@ -190,7 +188,6 @@ export default function PartnerReservations() {
         </div>
       )}
 
-      {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center h-40"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /></div>
       ) : filtered.length === 0 ? (
@@ -204,14 +201,12 @@ export default function PartnerReservations() {
             const detail = detailData[tour.id] || tour
             const isExpanded = expandedId === tour.id
             const isEditing = editingId === tour.id
+            const comprobantes = parseComprobantes(detail.comprobante_url)
 
             return (
               <div key={tour.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                {/* Row header — always visible, clickable */}
-                <div
-                  className="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => handleExpandToggle(tour.id)}
-                >
+                <div className="px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => handleExpandToggle(tour.id)}>
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 text-sm truncate">{tour.cliente}</p>
@@ -226,10 +221,8 @@ export default function PartnerReservations() {
                   </div>
                 </div>
 
-                {/* Expanded detail */}
                 {isExpanded && (
                   <div className="border-t border-gray-100 px-4 py-4 space-y-4">
-                    {/* Motivo de rechazo if rejected */}
                     {detail.estatus === 'Rechazado' && detail.motivo_rechazo && (
                       <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
                         <strong>Motivo de rechazo:</strong> {detail.motivo_rechazo}
@@ -238,7 +231,6 @@ export default function PartnerReservations() {
 
                     {!isEditing ? (
                       <>
-                        {/* View mode */}
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
                           <div><span className="text-gray-400 text-xs block">Cliente</span><span className="font-medium text-gray-900">{detail.cliente}</span></div>
                           <div><span className="text-gray-400 text-xs block">WhatsApp</span><span className="font-medium text-gray-900">{detail.whatsapp || '—'}</span></div>
@@ -250,28 +242,15 @@ export default function PartnerReservations() {
                           <div><span className="text-gray-400 text-xs block">Edades</span><span className="font-medium text-gray-900">{detail.edades || '—'}</span></div>
                           <div><span className="text-gray-400 text-xs block">Solicitado por</span><span className="font-medium text-gray-900">{detail.solicitado_por || '—'}</span></div>
                         </div>
-                        {/* Price details */}
                         {(detail.precio_ingreso || detail.costo_pago) && (
                           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mt-2">
                             <p className="text-xs font-semibold text-blue-800 mb-2">💰 Detalle de Precio</p>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                              <div>
-                                <span className="text-blue-500 text-xs block">Precio Tour</span>
-                                <span className="font-bold text-blue-900">${(detail.precio_ingreso || 0).toLocaleString()}</span>
-                              </div>
-                              <div>
-                                <span className="text-blue-500 text-xs block">ITBM (7%)</span>
-                                <span className="font-bold text-blue-900">${Math.round((detail.precio_ingreso || 0) * 0.07).toLocaleString()}</span>
-                              </div>
-                              <div>
-                                <span className="text-blue-500 text-xs block">Total</span>
-                                <span className="font-bold text-green-700">${Math.round((detail.precio_ingreso || 0) * 1.07).toLocaleString()}</span>
-                              </div>
+                              <div><span className="text-blue-500 text-xs block">Precio Tour</span><span className="font-bold text-blue-900">${(detail.precio_ingreso || 0).toLocaleString()}</span></div>
+                              <div><span className="text-blue-500 text-xs block">ITBM (7%)</span><span className="font-bold text-blue-900">${Math.round((detail.precio_ingreso || 0) * 0.07).toLocaleString()}</span></div>
+                              <div><span className="text-blue-500 text-xs block">Total</span><span className="font-bold text-green-700">${Math.round((detail.precio_ingreso || 0) * 1.07).toLocaleString()}</span></div>
                               {detail.comision_pct != null && (
-                                <div>
-                                  <span className="text-blue-500 text-xs block">Comisión ({detail.comision_pct}%)</span>
-                                  <span className="font-bold text-purple-700">${Math.round((detail.precio_ingreso || 0) * detail.comision_pct / 100).toLocaleString()}</span>
-                                </div>
+                                <div><span className="text-blue-500 text-xs block">Comisión ({detail.comision_pct}%)</span><span className="font-bold text-purple-700">${Math.round((detail.precio_ingreso || 0) * detail.comision_pct / 100).toLocaleString()}</span></div>
                               )}
                             </div>
                           </div>
@@ -282,24 +261,25 @@ export default function PartnerReservations() {
                             <p className="text-gray-700">{detail.notas}</p>
                           </div>
                         )}
-                        {detail.comprobante_url && (
+                        {comprobantes.length > 0 && (
                           <div>
-                            <span className="text-gray-400 text-xs block mb-1">Comprobante</span>
-                            <img src={detail.comprobante_url} alt="Comprobante" className="max-h-40 rounded-lg border border-gray-200 object-contain bg-gray-50" />
+                            <span className="text-gray-400 text-xs block mb-1">Comprobantes ({comprobantes.length})</span>
+                            <div className="flex flex-wrap gap-2">
+                              {comprobantes.map((url, i) => (
+                                <img key={i} src={url} alt={`Comprobante ${i + 1}`} className="max-h-40 rounded-lg border border-gray-200 object-contain bg-gray-50" />
+                              ))}
+                            </div>
                           </div>
                         )}
                         <div className="flex justify-end">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); startEditing(detail) }}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm"
-                          >
+                          <button onClick={(e) => { e.stopPropagation(); startEditing(detail) }}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm">
                             <Edit3 className="w-3.5 h-3.5" /> Editar información
                           </button>
                         </div>
                       </>
                     ) : (
                       <>
-                        {/* Edit mode */}
                         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-center gap-2 text-sm text-amber-800">
                           <AlertTriangle className="w-4 h-4 shrink-0" />
                           <span>Al guardar cambios, el tour <strong>volverá a estado "Por Aprobar"</strong> para revisión de Mahana.</span>
@@ -316,12 +296,10 @@ export default function PartnerReservations() {
                           ].map(f => (
                             <div key={f.key}>
                               <label className="block text-xs font-medium text-gray-600 mb-1">{f.label}</label>
-                              <input
-                                value={editForm[f.key] || ''}
+                              <input value={editForm[f.key] || ''}
                                 onChange={e => setEditForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                                 placeholder={f.placeholder}
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                             </div>
                           ))}
                         </div>
@@ -329,11 +307,9 @@ export default function PartnerReservations() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">Idioma</label>
-                            <select
-                              value={editForm.idioma || ''}
+                            <select value={editForm.idioma || ''}
                               onChange={e => setEditForm(prev => ({ ...prev, idioma: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                               <option value="">Seleccionar</option>
                               <option value="Español">Español</option>
                               <option value="English">English</option>
@@ -343,43 +319,45 @@ export default function PartnerReservations() {
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1"># Personas</label>
-                            <input
-                              type="number" min="1" max="20"
-                              value={editForm.pax || 1}
+                            <input type="number" min="1" max="20" value={editForm.pax || 1}
                               onChange={e => setEditForm(prev => ({ ...prev, pax: parseInt(e.target.value) || 1 }))}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-gray-600 mb-1">Edades</label>
-                            <input
-                              value={editForm.edades || ''}
+                            <input value={editForm.edades || ''}
                               onChange={e => setEditForm(prev => ({ ...prev, edades: e.target.value }))}
                               placeholder="Ej: 25, 30, 8"
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                           </div>
                         </div>
 
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-1">Notas</label>
-                          <textarea
-                            rows={3}
-                            value={editForm.notas || ''}
+                          <textarea rows={3} value={editForm.notas || ''}
                             onChange={e => setEditForm(prev => ({ ...prev, notas: e.target.value }))}
                             placeholder="Lugar de salida, detalles, restricciones..."
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                          />
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
                         </div>
 
-                        {/* Comprobante update */}
+                        {/* Comprobantes — existing + add new */}
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Comprobante de pago</label>
-                          {detail.comprobante_url && !newComprobantePreview && (
-                            <img src={detail.comprobante_url} alt="Comprobante actual" className="max-h-32 rounded-lg border border-gray-200 object-contain bg-gray-50 mb-2" />
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Comprobantes de pago</label>
+                          {existingComprobantes.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mb-2">
+                              {existingComprobantes.map((url, i) => (
+                                <div key={i} className="relative">
+                                  <img src={url} alt={`Comprobante ${i + 1}`} className="max-h-32 rounded-lg border border-gray-200 object-contain bg-gray-50" />
+                                  <button onClick={() => removeExistingComprobante(i)}
+                                    className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600" title="Eliminar">
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           )}
                           {newComprobantePreview && (
-                            <div className="relative mb-2">
+                            <div className="relative mb-2 inline-block">
                               <img src={newComprobantePreview} alt="Nuevo comprobante" className="max-h-32 rounded-lg border border-blue-200 object-contain bg-blue-50" />
                               <button onClick={() => { setNewComprobante(null); setNewComprobantePreview(null); if (editFileRef.current) editFileRef.current.value = '' }}
                                 className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600">
@@ -389,23 +367,18 @@ export default function PartnerReservations() {
                           )}
                           <button onClick={() => editFileRef.current?.click()}
                             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50">
-                            <Upload className="w-3.5 h-3.5" /> {newComprobante ? 'Cambiar comprobante' : 'Subir nuevo comprobante'}
+                            <Upload className="w-3.5 h-3.5" /> Agregar comprobante
                           </button>
                           <input ref={editFileRef} type="file" accept="image/*,.pdf" onChange={handleEditFileChange} className="hidden" />
                         </div>
 
                         <div className="flex justify-end gap-2 pt-2">
-                          <button
-                            onClick={() => { setEditingId(null); setNewComprobante(null); setNewComprobantePreview(null) }}
-                            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-                          >
+                          <button onClick={() => { setEditingId(null); setNewComprobante(null); setNewComprobantePreview(null) }}
+                            className="flex items-center gap-1.5 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
                             <X className="w-3.5 h-3.5" /> Cancelar
                           </button>
-                          <button
-                            onClick={() => handleSave(tour.id)}
-                            disabled={saving}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-sm"
-                          >
+                          <button onClick={() => handleSave(tour.id)} disabled={saving}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 shadow-sm">
                             {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                             Guardar cambios
                           </button>

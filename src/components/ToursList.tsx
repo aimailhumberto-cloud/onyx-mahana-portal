@@ -99,8 +99,10 @@ export default function ToursList() {
         if (!t.responsable) missing.push('Responsable')
         
         if (missing.length > 0) {
-          alert(`⚠️ Faltan campos obligatorios: ${missing.join(', ')}.\n\nDebes completar estos datos antes de aprobar. Se abrirá el formulario de edición.`)
-          navigate(`/tours/${id}/edit`)
+          const goToEdit = confirm(`⚠️ Faltan campos obligatorios: ${missing.join(', ')}.\n\n¿Deseas ir al formulario de edición para completarlos?`)
+          if (goToEdit) {
+            navigate(`/tours/${id}/editar`)
+          }
           setActionLoading(false)
           return
         }
