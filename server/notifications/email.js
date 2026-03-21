@@ -247,14 +247,15 @@ async function sendEmail(to, subject, html, cc = null) {
   }
 }
 
-async function sendConfirmacion(tour) {
-  const email = tour.email;
-  if (!email) {
+async function sendConfirmacion(tour, cc = null) {
+  const clientEmail = tour.email || tour.email_cliente;
+  if (!clientEmail && !cc) {
     console.warn('📧 No email for tour', tour.id, '- skipping confirmation');
     return { success: false, reason: 'no_email' };
   }
+  const to = clientEmail || cc; // If no client email, send to CC directly
   const subject = `✅ Reserva Confirmada — ${tour.actividad_nombre || tour.actividad || 'Tour'} | Mahana Tours`;
-  return sendEmail(email, subject, confirmacionTemplate(tour));
+  return sendEmail(to, subject, confirmacionTemplate(tour), clientEmail ? cc : null);
 }
 
 async function sendRecordatorio(tour) {
@@ -322,11 +323,12 @@ function estadiaConfirmacionTemplate(estadia) {
   `, 'Estadía Confirmada — Mahana');
 }
 
-async function sendEstadiaConfirmacion(estadia) {
-  const email = estadia.email;
-  if (!email) return { success: false, reason: 'no_email' };
+async function sendEstadiaConfirmacion(estadia, cc = null) {
+  const clientEmail = estadia.email;
+  if (!clientEmail && !cc) return { success: false, reason: 'no_email' };
+  const to = clientEmail || cc;
   const subject = `✅ Estadía Confirmada — ${estadia.propiedad || 'Hospedaje'} | Mahana`;
-  return sendEmail(email, subject, estadiaConfirmacionTemplate(estadia));
+  return sendEmail(to, subject, estadiaConfirmacionTemplate(estadia), clientEmail ? cc : null);
 }
 
 async function sendEstadiaStatusChange(estadia, newStatus) {
