@@ -107,26 +107,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Demo credentials */}
-          <div className="mt-6 pt-5 border-t border-white/10">
-            <p className="text-xs text-gray-400 text-center mb-3">Cuentas de prueba</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => { setEmail('admin@mahana.com'); setPassword('mahana2026') }}
-                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-all text-center"
-              >
-                🔑 Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail('caracol@playacaracol.com'); setPassword('caracol2026') }}
-                className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 hover:text-white transition-all text-center"
-              >
-                🏖️ Caracol
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
