@@ -8,7 +8,9 @@ const { verifyPassword, hashPassword, generateToken, requireAuth, requireRole, i
 const notifications = require('./notifications');
 
 // ── Multer config for file uploads ──
-const uploadsDir = path.join(__dirname, '../uploads');
+const uploadsDir = process.env.NODE_ENV === 'production' && fs.existsSync('/data')
+  ? '/data/uploads'
+  : path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -2206,8 +2208,12 @@ if (fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html')))
   console.log('✅ Frontend found at:', distPath);
   app.use(express.static(distPath));
   app.get('*', (req, res) => {
+    // Don't catch API routes or uploaded files
     if (req.path.startsWith('/api/')) {
       return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Endpoint not found' } });
+    }
+    if (req.path.startsWith('/uploads/')) {
+      return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'File not found' } });
     }
     res.sendFile(path.join(distPath, 'index.html'));
   });
