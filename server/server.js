@@ -2128,9 +2128,13 @@ app.get('/api/v1/partner/cxc', requireAuth, (req, res) => {
 
     const summary = db.prepare(`
       SELECT
-        COALESCE(SUM(CASE WHEN cxc_estatus = 'Pendiente' THEN cxc_total ELSE 0 END), 0) as por_pagar,
+        COALESCE(SUM(CASE WHEN cxc_estatus = 'Pendiente' THEN cxc_total ELSE 0 END), 0) as pendiente,
+        COALESCE(SUM(CASE WHEN cxc_estatus = 'Enviada' THEN cxc_total ELSE 0 END), 0) as enviada,
+        COALESCE(SUM(CASE WHEN cxc_estatus IN ('Pendiente', 'Enviada') THEN cxc_total ELSE 0 END), 0) as por_pagar,
         COALESCE(SUM(CASE WHEN cxc_estatus = 'Pagada' THEN cxc_total ELSE 0 END), 0) as pagado,
         SUM(CASE WHEN cxc_estatus = 'Pendiente' THEN 1 ELSE 0 END) as count_pendiente,
+        SUM(CASE WHEN cxc_estatus = 'Enviada' THEN 1 ELSE 0 END) as count_enviada,
+        SUM(CASE WHEN cxc_estatus IN ('Pendiente', 'Enviada') THEN 1 ELSE 0 END) as count_por_pagar,
         SUM(CASE WHEN cxc_estatus = 'Pagada' THEN 1 ELSE 0 END) as count_pagado
       FROM reservas_tours
       WHERE (eliminado IS NULL OR eliminado = 0) AND vendedor = ?
