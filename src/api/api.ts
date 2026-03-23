@@ -6,9 +6,6 @@ const api = axios.create({
   timeout: 10000,
 })
 
-const API_KEY = import.meta.env.VITE_API_KEY || 'mahana-dev-key-2026'
-const authHeaders = { 'X-API-Key': API_KEY }
-
 // ── JWT Interceptor ──
 // Automatically attach Bearer token from localStorage to all requests
 api.interceptors.request.use((config) => {
@@ -277,17 +274,17 @@ export async function getEstadiaById(id: number): Promise<ApiResponse<Estadia>> 
 }
 
 export async function createEstadia(data: Partial<Estadia>): Promise<ApiResponse<Estadia>> {
-  const response = await api.post('/estadias', data, { headers: authHeaders })
+  const response = await api.post('/estadias', data)
   return response.data
 }
 
 export async function updateEstadia(id: number, data: Partial<Estadia>): Promise<ApiResponse<Estadia>> {
-  const response = await api.put(`/estadias/${id}`, data, { headers: authHeaders })
+  const response = await api.put(`/estadias/${id}`, data)
   return response.data
 }
 
 export async function updateEstadiaStatus(id: number, estado: string): Promise<ApiResponse<Estadia>> {
-  const response = await api.patch(`/estadias/${id}/status`, { estado }, { headers: authHeaders })
+  const response = await api.patch(`/estadias/${id}/status`, { estado })
   return response.data
 }
 
@@ -320,13 +317,13 @@ export async function getActividadById(id: number): Promise<ApiResponse<Activida
 }
 
 export async function createActividad(data: Partial<Actividad>): Promise<ApiResponse<Actividad>> {
-  const response = await api.post('/actividades', data, { headers: authHeaders })
+  const response = await api.post('/actividades', data)
   return response.data
 }
 
 export async function updateActividad(id: number, data: Partial<Actividad>): Promise<ApiResponse<Actividad>> {
   try {
-    const response = await api.put(`/actividades/${id}`, data, { headers: authHeaders })
+    const response = await api.put(`/actividades/${id}`, data)
     return response.data
   } catch (err: any) {
     return { success: false, data: {} as Actividad, error: { code: 'NETWORK', message: err.response?.data?.error?.message || 'Error al actualizar actividad' } }
@@ -334,7 +331,7 @@ export async function updateActividad(id: number, data: Partial<Actividad>): Pro
 }
 
 export async function deleteActividad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>> {
-  const response = await api.delete(`/actividades/${id}`, { headers: authHeaders })
+  const response = await api.delete(`/actividades/${id}`)
   return response.data
 }
 
@@ -355,17 +352,17 @@ export async function getPropiedadById(id: number): Promise<ApiResponse<Propieda
 }
 
 export async function createPropiedad(data: Partial<Propiedad>): Promise<ApiResponse<Propiedad>> {
-  const response = await api.post('/propiedades', data, { headers: authHeaders })
+  const response = await api.post('/propiedades', data)
   return response.data
 }
 
 export async function updatePropiedad(id: number, data: Partial<Propiedad>): Promise<ApiResponse<Propiedad>> {
-  const response = await api.put(`/propiedades/${id}`, data, { headers: authHeaders })
+  const response = await api.put(`/propiedades/${id}`, data)
   return response.data
 }
 
 export async function deletePropiedad(id: number): Promise<ApiResponse<{ deleted: boolean; id: number }>>{
-  const response = await api.delete(`/propiedades/${id}`, { headers: authHeaders })
+  const response = await api.delete(`/propiedades/${id}`)
   return response.data
 }
 

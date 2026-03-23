@@ -33,6 +33,10 @@ const app = express();
 const PORT = process.env.PORT || 3101;
 const API_KEY = process.env.API_KEY || 'mahana-dev-key-2026';
 
+if (process.env.NODE_ENV === 'production' && API_KEY === 'mahana-dev-key-2026') {
+  console.warn('⚠️  WARNING: Using default API_KEY in production. Set API_KEY env var.');
+}
+
 // ── Middleware ──
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean);
@@ -461,7 +465,7 @@ app.get('/api/v1/estadias/:id', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/v1/estadias', requireApiKey, (req, res) => {
+app.post('/api/v1/estadias', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const { cliente, propiedad, check_in } = req.body;
     const missing = [];
@@ -509,7 +513,7 @@ app.post('/api/v1/estadias', requireApiKey, (req, res) => {
   }
 });
 
-app.put('/api/v1/estadias/:id', requireApiKey, (req, res) => {
+app.put('/api/v1/estadias/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const existing = findById('reservas_estadias', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', `Estadia ${req.params.id} not found`, 404);
@@ -544,7 +548,7 @@ app.put('/api/v1/estadias/:id', requireApiKey, (req, res) => {
   }
 });
 
-app.patch('/api/v1/estadias/:id/status', requireApiKey, (req, res) => {
+app.patch('/api/v1/estadias/:id/status', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const { estado } = req.body;
     if (!estado) return error(res, 'VALIDATION_ERROR', 'Field "estado" is required', 400, ['estado']);
@@ -574,7 +578,7 @@ app.patch('/api/v1/estadias/:id/status', requireApiKey, (req, res) => {
   }
 });
 
-app.delete('/api/v1/estadias/:id', requireApiKey, (req, res) => {
+app.delete('/api/v1/estadias/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const removed = remove('reservas_estadias', req.params.id);
     if (!removed) return error(res, 'NOT_FOUND', `Estadia ${req.params.id} not found`, 404);
@@ -588,7 +592,7 @@ app.delete('/api/v1/estadias/:id', requireApiKey, (req, res) => {
 // DASHBOARD / CATALOG ENDPOINTS
 // ══════════════════════════════════════
 
-app.get('/api/v1/dashboard', (req, res) => {
+app.get('/api/v1/dashboard', requireAuth, (req, res) => {
   try {
     const db = getDb();
     const { mes } = req.query;
@@ -1286,7 +1290,7 @@ app.post('/api/v1/uploads', requireAuth, upload.single('file'), (req, res) => {
   }
 });
 
-app.get('/api/v1/charts', (req, res) => {
+app.get('/api/v1/charts', requireAuth, (req, res) => {
   try {
     const db = getDb();
     const { mes } = req.query; // e.g. "2026-03", "2026", or empty for current month
@@ -1406,7 +1410,7 @@ app.get('/api/v1/charts', (req, res) => {
   }
 });
 
-app.get('/api/v1/actividades', (req, res) => {
+app.get('/api/v1/actividades', requireAuth, (req, res) => {
   try {
     const result = findAll('actividades', { limit: 200, orderBy: 'categoria ASC, nombre ASC' });
     success(res, result.data, result.meta);
@@ -1415,7 +1419,7 @@ app.get('/api/v1/actividades', (req, res) => {
   }
 });
 
-app.get('/api/v1/actividades/:id', (req, res) => {
+app.get('/api/v1/actividades/:id', requireAuth, (req, res) => {
   try {
     const item = findById('actividades', req.params.id);
     if (!item) return error(res, 'NOT_FOUND', `Actividad ${req.params.id} not found`, 404);
@@ -1425,7 +1429,7 @@ app.get('/api/v1/actividades/:id', (req, res) => {
   }
 });
 
-app.post('/api/v1/actividades', requireApiKey, (req, res) => {
+app.post('/api/v1/actividades', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const { nombre } = req.body;
     if (!nombre) return error(res, 'VALIDATION_ERROR', 'Campo "nombre" es requerido', 400, ['nombre']);
@@ -1454,7 +1458,7 @@ app.post('/api/v1/actividades', requireApiKey, (req, res) => {
   }
 });
 
-app.put('/api/v1/actividades/:id', requireApiKey, (req, res) => {
+app.put('/api/v1/actividades/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const existing = findById('actividades', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', `Actividad ${req.params.id} not found`, 404);
@@ -1483,7 +1487,7 @@ app.put('/api/v1/actividades/:id', requireApiKey, (req, res) => {
   }
 });
 
-app.delete('/api/v1/actividades/:id', requireApiKey, (req, res) => {
+app.delete('/api/v1/actividades/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const removed = remove('actividades', req.params.id);
     if (!removed) return error(res, 'NOT_FOUND', `Actividad ${req.params.id} not found`, 404);
@@ -1497,7 +1501,7 @@ app.delete('/api/v1/actividades/:id', requireApiKey, (req, res) => {
 // PROPIEDADES ENDPOINTS (CRUD)
 // ══════════════════════════════════════
 
-app.get('/api/v1/propiedades', (req, res) => {
+app.get('/api/v1/propiedades', requireAuth, (req, res) => {
   try {
     const result = findAll('propiedades', { limit: 100, orderBy: 'nombre ASC' });
     success(res, result.data, result.meta);
@@ -1506,7 +1510,7 @@ app.get('/api/v1/propiedades', (req, res) => {
   }
 });
 
-app.get('/api/v1/propiedades/:id', (req, res) => {
+app.get('/api/v1/propiedades/:id', requireAuth, (req, res) => {
   try {
     const item = findById('propiedades', req.params.id);
     if (!item) return error(res, 'NOT_FOUND', `Propiedad ${req.params.id} not found`, 404);
@@ -1516,7 +1520,7 @@ app.get('/api/v1/propiedades/:id', (req, res) => {
   }
 });
 
-app.post('/api/v1/propiedades', requireApiKey, (req, res) => {
+app.post('/api/v1/propiedades', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const { nombre } = req.body;
     if (!nombre) return error(res, 'VALIDATION_ERROR', 'Campo "nombre" es requerido', 400, ['nombre']);
@@ -1542,7 +1546,7 @@ app.post('/api/v1/propiedades', requireApiKey, (req, res) => {
   }
 });
 
-app.put('/api/v1/propiedades/:id', requireApiKey, (req, res) => {
+app.put('/api/v1/propiedades/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const existing = findById('propiedades', req.params.id);
     if (!existing) return error(res, 'NOT_FOUND', `Propiedad ${req.params.id} not found`, 404);
@@ -1567,7 +1571,7 @@ app.put('/api/v1/propiedades/:id', requireApiKey, (req, res) => {
   }
 });
 
-app.delete('/api/v1/propiedades/:id', requireApiKey, (req, res) => {
+app.delete('/api/v1/propiedades/:id', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const removed = remove('propiedades', req.params.id);
     if (!removed) return error(res, 'NOT_FOUND', `Propiedad ${req.params.id} not found`, 404);
@@ -1577,7 +1581,7 @@ app.delete('/api/v1/propiedades/:id', requireApiKey, (req, res) => {
   }
 });
 
-app.get('/api/v1/staff', (req, res) => {
+app.get('/api/v1/staff', requireAuth, (req, res) => {
   try {
     const result = findAll('staff', { limit: 100, orderBy: 'nombre ASC' });
     success(res, result.data, result.meta);

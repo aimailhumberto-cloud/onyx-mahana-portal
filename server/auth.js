@@ -1,6 +1,12 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+// Fail-fast in production if secrets are not configured
+if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
+  console.error('❌ FATAL: JWT_SECRET env var is required in production');
+  process.exit(1);
+}
+
 const JWT_SECRET = process.env.JWT_SECRET || 'mahana-jwt-secret-2026-change-in-prod';
 const JWT_EXPIRES = '7d';
 
