@@ -417,6 +417,31 @@ export default function ToursList() {
                                     </div>
                                   )}
                                 </div>
+                                {/* CxC / Facturación cross-link */}
+                                {expandedDetail.vendedor && expandedDetail.cxc_total > 0 && (
+                                  <div className="w-56 shrink-0">
+                                    <span className="text-gray-400 text-xs block mb-2 font-medium uppercase tracking-wide">Facturación CxC</span>
+                                    <div className="bg-white rounded-xl border-2 border-gray-200 p-3 space-y-1.5 text-xs">
+                                      <div className="flex justify-between"><span className="text-gray-500">Subtotal:</span><span>{`$${(expandedDetail.cxc_subtotal || 0).toFixed(2)}`}</span></div>
+                                      <div className="flex justify-between"><span className="text-gray-500">ITBM:</span><span>{`$${(expandedDetail.cxc_itbm || 0).toFixed(2)}`}</span></div>
+                                      <div className="flex justify-between font-bold border-t pt-1"><span>Total CxC:</span><span className="text-turquoise-600">{`$${(expandedDetail.cxc_total || 0).toFixed(2)}`}</span></div>
+                                      <div className="pt-1 border-t">
+                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                          expandedDetail.cxc_estatus === 'Pagada' ? 'bg-green-100 text-green-700'
+                                          : expandedDetail.cxc_estatus === 'Enviada' ? 'bg-blue-100 text-blue-700'
+                                          : expandedDetail.cxc_estatus === 'Pendiente' ? 'bg-yellow-100 text-yellow-700'
+                                          : 'bg-gray-100 text-gray-500'
+                                        }`}>{expandedDetail.cxc_estatus || 'Sin Factura'}</span>
+                                      </div>
+                                      {expandedDetail.cxc_factura_url && (
+                                        <a href={expandedDetail.cxc_factura_url} target="_blank" rel="noopener noreferrer"
+                                          className="flex items-center gap-1 text-turquoise-600 hover:underline text-xs mt-1">
+                                          <FileText className="w-3 h-3" /> Ver Factura
+                                        </a>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ) : null}
                           </div>

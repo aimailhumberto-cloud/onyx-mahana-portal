@@ -2020,7 +2020,8 @@ app.get('/api/v1/cxc', requireAuth, requireRole('admin'), (req, res) => {
       SELECT id, fecha, hora, cliente, actividad, vendedor, estatus,
         precio_ingreso, comision_pct, monto_comision, ganancia_mahana,
         cxc_subtotal, cxc_itbm, cxc_total, cxc_estatus,
-        cxc_factura_url, cxc_fecha_emision, cxc_fecha_vencimiento, cxc_fecha_pago
+        cxc_factura_url, cxc_fecha_emision, cxc_fecha_vencimiento, cxc_fecha_pago,
+        comprobante_url
       FROM reservas_tours
       WHERE ${where}
       ORDER BY fecha DESC

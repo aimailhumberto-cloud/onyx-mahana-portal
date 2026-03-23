@@ -271,6 +271,35 @@ export default function PartnerReservations() {
                             </div>
                           </div>
                         )}
+                        {/* CxC / Factura Mahana cross-link */}
+                        {detail.cxc_total > 0 && (
+                          <div className="bg-gradient-to-r from-turquoise-50 to-blue-50 border border-turquoise-200 rounded-lg p-3 mt-2">
+                            <p className="text-xs font-semibold text-turquoise-800 mb-2">📄 Factura Mahana (CxC)</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                              <div><span className="text-turquoise-500 text-xs block">Subtotal</span><span className="font-bold text-turquoise-900">${(detail.cxc_subtotal || 0).toFixed(2)}</span></div>
+                              <div><span className="text-turquoise-500 text-xs block">ITBM (7%)</span><span className="font-bold text-turquoise-900">${(detail.cxc_itbm || 0).toFixed(2)}</span></div>
+                              <div><span className="text-turquoise-500 text-xs block">Total CxC</span><span className="font-bold text-turquoise-900">${(detail.cxc_total || 0).toFixed(2)}</span></div>
+                              <div>
+                                <span className="text-turquoise-500 text-xs block">Estatus</span>
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                                  detail.cxc_estatus === 'Pagada' ? 'bg-green-100 text-green-700'
+                                  : detail.cxc_estatus === 'Enviada' ? 'bg-blue-100 text-blue-700'
+                                  : detail.cxc_estatus === 'Pendiente' ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-gray-100 text-gray-500'
+                                }`}>{detail.cxc_estatus || 'Sin Factura'}</span>
+                              </div>
+                            </div>
+                            {detail.cxc_factura_url && (
+                              <a href={detail.cxc_factura_url} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-turquoise-600 hover:underline text-xs mt-2 font-medium">
+                                📥 Descargar Factura Mahana
+                              </a>
+                            )}
+                            {detail.cxc_fecha_emision && (
+                              <p className="text-[10px] text-gray-500 mt-1">Emitida: {detail.cxc_fecha_emision} {detail.cxc_fecha_vencimiento ? `· Vence: ${detail.cxc_fecha_vencimiento}` : ''}</p>
+                            )}
+                          </div>
+                        )}
                         <div className="flex justify-end">
                           <button onClick={(e) => { e.stopPropagation(); startEditing(detail) }}
                             className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 shadow-sm">

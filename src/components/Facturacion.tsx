@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCxC, updateCxC, uploadFile, CxCTour, CxCData } from '../api/api'
-import { FileText, Clock, CheckCircle, Send, AlertTriangle, Filter, Upload, Download, ChevronDown, ChevronUp, Loader2, RefreshCw } from 'lucide-react'
+import { FileText, Clock, CheckCircle, Send, AlertTriangle, Filter, Upload, Download, ChevronDown, ChevronUp, Loader2, RefreshCw, Undo2, Image, ExternalLink } from 'lucide-react'
 
 const fmt = (n: number) => `$${(n || 0).toFixed(2)}`
 
@@ -15,6 +15,12 @@ const nextStatus: Record<string, string> = {
   'Sin Factura': 'Pendiente',
   'Pendiente': 'Enviada',
   'Enviada': 'Pagada',
+}
+
+const prevStatus: Record<string, string> = {
+  'Pendiente': 'Sin Factura',
+  'Enviada': 'Pendiente',
+  'Pagada': 'Enviada',
 }
 
 export default function Facturacion() {
@@ -43,12 +49,29 @@ export default function Facturacion() {
     if (result.success) loadData()
   }
 
+  const handleRevertStatus = async (tour: CxCTour) => {
+    const prev = prevStatus[tour.cxc_estatus]
+    if (!prev) return
+    if (!confirm(`¿Revertir estatus de "${statusConfig[tour.cxc_estatus]?.label}" a "${statusConfig[prev]?.label}"?`)) return
+    const updates: any = { cxc_estatus: prev }
+    // Clear dates when reverting
+    if (prev === 'Sin Factura') {
+      updates.cxc_fecha_emision = null
+      updates.cxc_fecha_vencimiento = null
+    }
+    if (tour.cxc_estatus === 'Pagada') {
+      updates.cxc_fecha_pago = null
+    }
+    const result = await updateCxC(tour.id, updates)
+    if (result.success) loadData()
+  }
+
   const handleUploadFactura = async (tourId: number, file: File) => {
     setUploading(tourId)
     try {
       const uploadResult = await uploadFile(file)
       if (uploadResult.success) {
-        await updateCxC(tourId, { cxc_factura_url: uploadResult.data.url, cxc_estatus: 'Pendiente' })
+        await updateCxC(tourId, { cxc_factura_url: uploadResult.data.url })
         loadData()
       }
     } catch {
@@ -192,7 +215,7 @@ export default function Facturacion() {
                     {isExpanded && (
                       <tr key={`${tour.id}-detail`} className="bg-gray-50">
                         <td colSpan={8} className="px-4 py-4">
-                          <ExpandedDetail tour={tour} onStatusChange={handleStatusChange} onUpload={handleUploadFactura} uploading={uploading === tour.id} />
+                          <ExpandedDetail tour={tour} onStatusChange={handleStatusChange} onRevert={handleRevertStatus} onUpload={handleUploadFactura} uploading={uploading === tour.id} />
                         </td>
                       </tr>
                     )}
@@ -244,15 +267,21 @@ function AgingBlock({ label, value, color }: { label: string; value: number; col
   )
 }
 
-function ExpandedDetail({ tour, onStatusChange, onUpload, uploading }: {
-  tour: CxCTour; onStatusChange: (t: CxCTour, s: string) => void; onUpload: (id: number, f: File) => void; uploading: boolean
+function ExpandedDetail({ tour, onStatusChange, onRevert, onUpload, uploading }: {
+  tour: CxCTour & { comprobante_url?: string }; onStatusChange: (t: CxCTour, s: string) => void; onRevert: (t: CxCTour) => void; onUpload: (id: number, f: File) => void; uploading: boolean
 }) {
   const next = nextStatus[tour.cxc_estatus]
+  const prev = prevStatus[tour.cxc_estatus]
   const nextCfg = next ? statusConfig[next] : null
+  const prevCfg = prev ? statusConfig[prev] : null
   const NextIcon = nextCfg?.icon
 
+  // Parse comprobante URLs (may be comma-separated)
+  const comprobantes = tour.comprobante_url ? tour.comprobante_url.split(',').filter(Boolean) : []
+  const isImage = (url: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(url)
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Financial breakdown */}
       <div className="space-y-2">
         <h4 className="text-xs font-semibold text-gray-500 uppercase">Desglose Financiero</h4>
@@ -281,33 +310,70 @@ function ExpandedDetail({ tour, onStatusChange, onUpload, uploading }: {
             <div className="flex justify-between"><span className="text-gray-500">Fecha pago:</span><span className="text-green-600">{tour.cxc_fecha_pago}</span></div>
           )}
 
-          {/* Upload factura */}
-          <div className="pt-2 space-y-2">
-            {tour.cxc_factura_url ? (
+          {/* Factura Mahana — always show upload + existing */}
+          <div className="pt-2 space-y-2 border-t">
+            <span className="text-xs font-semibold text-gray-500 uppercase">Factura Mahana</span>
+            {tour.cxc_factura_url && (
               <a href={tour.cxc_factura_url} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-turquoise-600 hover:underline text-xs">
-                <Download className="w-3 h-3" /> Ver Factura PDF
+                className="flex items-center gap-1 text-turquoise-600 hover:underline text-xs">
+                <Download className="w-3 h-3" /> Ver Factura Actual
               </a>
-            ) : (
-              <label className="inline-flex items-center gap-1 text-xs text-blue-600 cursor-pointer hover:underline">
-                <Upload className="w-3 h-3" />
-                {uploading ? 'Subiendo...' : 'Subir Factura PDF'}
-                <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
-                  onChange={e => e.target.files?.[0] && onUpload(tour.id, e.target.files[0])} />
-              </label>
             )}
+            <label className="inline-flex items-center gap-1 text-xs text-blue-600 cursor-pointer hover:underline">
+              <Upload className="w-3 h-3" />
+              {uploading ? 'Subiendo...' : tour.cxc_factura_url ? 'Reemplazar Factura' : 'Subir Factura PDF'}
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden"
+                onChange={e => e.target.files?.[0] && onUpload(tour.id, e.target.files[0])} />
+            </label>
           </div>
 
-          {/* Next status action */}
-          {next && nextCfg && NextIcon && (
-            <button onClick={() => onStatusChange(tour, next)}
-              className={`w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                next === 'Pagada' ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                : next === 'Enviada' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
-              }`}>
-              <NextIcon className="w-4 h-4" /> Marcar como {nextCfg.label}
-            </button>
+          {/* Status actions — advance AND revert */}
+          <div className="pt-2 border-t space-y-2">
+            {next && nextCfg && NextIcon && (
+              <button onClick={() => onStatusChange(tour, next)}
+                className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  next === 'Pagada' ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : next === 'Enviada' ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
+                }`}>
+                <NextIcon className="w-4 h-4" /> Marcar como {nextCfg.label}
+              </button>
+            )}
+            {prev && prevCfg && (
+              <button onClick={() => onRevert(tour)}
+                className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 transition-colors">
+                <Undo2 className="w-3 h-3" /> Revertir a {prevCfg.label}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Comprobante del partner */}
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold text-gray-500 uppercase">Comprobante del Partner</h4>
+        <div className="bg-white rounded-lg p-3 border">
+          {comprobantes.length > 0 ? (
+            <div className="space-y-2">
+              {comprobantes.map((url, i) => (
+                <div key={i}>
+                  {isImage(url) ? (
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt={`Comprobante ${i + 1}`} className="w-full max-h-40 object-contain rounded-lg border bg-gray-50 hover:shadow-md transition-shadow" />
+                    </a>
+                  ) : (
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-blue-600 hover:underline p-2 bg-blue-50 rounded-lg">
+                      <ExternalLink className="w-4 h-4" /> Comprobante {i + 1}
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2 py-4 text-gray-400">
+              <Image className="w-8 h-8 opacity-30" />
+              <p className="text-xs">Sin comprobante del partner</p>
+            </div>
           )}
         </div>
       </div>
