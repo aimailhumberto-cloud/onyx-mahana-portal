@@ -91,7 +91,9 @@ function requireRole(...roles) {
 // ── Helper: is partner? ──
 
 function isPartner(req) {
-  return req.user && req.user.rol === 'partner';
+  if (!req.user) return false;
+  // Partner role OR vendedor linked to a partner company
+  return req.user.rol === 'partner' || (req.user.rol === 'vendedor' && !!req.user.vendedor);
 }
 
 module.exports = {

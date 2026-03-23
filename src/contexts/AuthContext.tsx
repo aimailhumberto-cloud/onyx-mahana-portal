@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login: loginFn,
       logout,
       isAdmin: user?.rol === 'admin',
-      isPartner: user?.rol === 'partner',
+      isPartner: user?.rol === 'partner' || (user?.rol === 'vendedor' && !!user?.vendedor),
     }}>
       {children}
     </AuthContext.Provider>
