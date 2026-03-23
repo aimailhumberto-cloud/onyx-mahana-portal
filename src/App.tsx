@@ -14,9 +14,11 @@ import PartnerLayout from './components/partner/PartnerLayout'
 import PartnerDashboard from './components/partner/PartnerDashboard'
 import PartnerTourRequest from './components/partner/PartnerTourRequest'
 import PartnerReservations from './components/partner/PartnerReservations'
+import PartnerFacturacion from './components/partner/PartnerFacturacion'
 import DisponibilidadAdmin from './components/DisponibilidadAdmin'
 import NotificacionesConfig from './components/NotificacionesConfig'
 import UsuariosAdmin from './components/UsuariosAdmin'
+import Facturacion from './components/Facturacion'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Loader2 } from 'lucide-react'
 
@@ -52,6 +54,7 @@ function AppRoutes() {
           <Route index element={<PartnerDashboard />} />
           <Route path="solicitar" element={<PartnerTourRequest />} />
           <Route path="reservas" element={<PartnerReservations />} />
+          <Route path="facturas" element={<PartnerFacturacion />} />
         </Route>
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -80,6 +83,7 @@ function AppRoutes() {
         <Route path="disponibilidad" element={<AdminOnly><DisponibilidadAdmin /></AdminOnly>} />
         <Route path="notificaciones" element={<AdminOnly><NotificacionesConfig /></AdminOnly>} />
         <Route path="usuarios" element={<AdminOnly><UsuariosAdmin /></AdminOnly>} />
+        <Route path="facturacion" element={<AdminOnly><Facturacion /></AdminOnly>} />
         <Route path="admin" element={<AdminOnly><AdminPanel /></AdminOnly>} />
       </Route>
       <Route path="/login" element={<Navigate to="/" replace />} />

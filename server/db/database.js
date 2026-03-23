@@ -45,6 +45,16 @@ function getDb() {
     addCol('reservas_tours', 'eliminado_por', 'TEXT');
     addCol('reservas_tours', 'eliminado_at', 'TEXT');
 
+    // CxC (Cuentas por Cobrar) — per-tour invoicing
+    addCol('reservas_tours', 'cxc_subtotal', 'REAL');
+    addCol('reservas_tours', 'cxc_itbm', 'REAL');
+    addCol('reservas_tours', 'cxc_total', 'REAL');
+    addCol('reservas_tours', 'cxc_estatus', "TEXT DEFAULT 'Sin Factura'");
+    addCol('reservas_tours', 'cxc_factura_url', 'TEXT');
+    addCol('reservas_tours', 'cxc_fecha_emision', 'TEXT');
+    addCol('reservas_tours', 'cxc_fecha_vencimiento', 'TEXT');
+    addCol('reservas_tours', 'cxc_fecha_pago', 'TEXT');
+
     // Product catalog columns for actividades
     addCol('actividades', 'categoria', 'TEXT');
     addCol('actividades', 'descripcion', 'TEXT');

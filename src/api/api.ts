@@ -655,3 +655,77 @@ export async function deleteUsuario(id: number): Promise<ApiResponse<{ deleted: 
   const response = await api.delete(`/usuarios/${id}`)
   return response.data
 }
+
+// ── CxC (Cuentas por Cobrar) ──
+
+export interface CxCTour {
+  id: number
+  fecha: string
+  hora: string
+  cliente: string
+  actividad: string
+  vendedor: string
+  estatus: string
+  precio_ingreso: number
+  comision_pct: number
+  monto_comision: number
+  ganancia_mahana: number
+  cxc_subtotal: number
+  cxc_itbm: number
+  cxc_total: number
+  cxc_estatus: string
+  cxc_factura_url: string | null
+  cxc_fecha_emision: string | null
+  cxc_fecha_vencimiento: string | null
+  cxc_fecha_pago: string | null
+}
+
+export interface CxCSummary {
+  total_tours: number
+  total_cxc: number
+  sin_factura: number
+  pendiente: number
+  enviada: number
+  pagado: number
+  count_sin_factura: number
+  count_pendiente: number
+  count_enviada: number
+  count_pagado: number
+}
+
+export interface CxCAging {
+  corriente: number
+  dias_15_30: number
+  dias_30_60: number
+  dias_60_plus: number
+}
+
+export interface CxCData {
+  tours: CxCTour[]
+  summary: CxCSummary
+  aging: CxCAging
+  porVendedor: { vendedor: string; total: number; pendiente: number; pagado: number }[]
+}
+
+export async function getCxC(params: Record<string, string> = {}): Promise<ApiResponse<CxCData>> {
+  try {
+    const response = await api.get('/cxc', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: {} as CxCData, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function updateCxC(tourId: number, data: Record<string, any>): Promise<ApiResponse<any>> {
+  const response = await api.patch(`/tours/${tourId}/cxc`, data)
+  return response.data
+}
+
+export async function getPartnerCxC(): Promise<ApiResponse<{ tours: CxCTour[]; summary: { por_pagar: number; pagado: number; count_pendiente: number; count_pagado: number } }>> {
+  try {
+    const response = await api.get('/partner/cxc')
+    return response.data
+  } catch (err) {
+    return { success: false, data: { tours: [], summary: { por_pagar: 0, pagado: 0, count_pendiente: 0, count_pagado: 0 } }, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
