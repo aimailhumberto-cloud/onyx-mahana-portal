@@ -218,6 +218,13 @@ function getDb() {
       console.log('✅ Notification config seeded');
     }
 
+    // Auto-fix: partner users must have vendedor set
+    const brokenPartners = db.prepare("SELECT id, email FROM usuarios WHERE rol = 'partner' AND (vendedor IS NULL OR vendedor = '')").all();
+    if (brokenPartners.length > 0) {
+      db.prepare("UPDATE usuarios SET vendedor = 'Playa Caracol' WHERE rol = 'partner' AND (vendedor IS NULL OR vendedor = '')").run();
+      console.log(`⚠️ Fixed ${brokenPartners.length} partner user(s) with missing vendedor → set to 'Playa Caracol'`);
+    }
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;

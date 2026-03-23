@@ -1097,6 +1097,9 @@ app.post('/api/v1/usuarios', requireAuth, requireRole('admin'), (req, res) => {
     if (password.length < 6) {
       return error(res, 'VALIDATION_ERROR', 'La contraseña debe tener al menos 6 caracteres', 400);
     }
+    if (rol === 'partner' && !vendedor) {
+      return error(res, 'VALIDATION_ERROR', 'El campo Vendedor/Empresa es requerido para partners', 400);
+    }
 
     const db = getDb();
     const existing = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email.toLowerCase().trim());
@@ -1134,6 +1137,13 @@ app.put('/api/v1/usuarios/:id', requireAuth, requireRole('admin'), (req, res) =>
 
     if (Object.keys(updates).length === 0) {
       return error(res, 'VALIDATION_ERROR', 'No hay datos para actualizar', 400);
+    }
+
+    // Ensure partner always has vendedor
+    const finalRol = updates.rol || user.rol;
+    const finalVendedor = updates.vendedor !== undefined ? updates.vendedor : user.vendedor;
+    if (finalRol === 'partner' && !finalVendedor) {
+      return error(res, 'VALIDATION_ERROR', 'El campo Vendedor/Empresa es requerido para partners', 400);
     }
 
     // Prevent changing own role from admin
