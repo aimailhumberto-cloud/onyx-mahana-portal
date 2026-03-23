@@ -55,6 +55,33 @@ function getDb() {
     addCol('reservas_tours', 'cxc_fecha_vencimiento', 'TEXT');
     addCol('reservas_tours', 'cxc_fecha_pago', 'TEXT');
 
+    // Backfill CxC for existing tours that have pricing but no CxC calculated
+    const toursToBackfill = db.prepare(`
+      SELECT id, precio_ingreso, comision_pct, monto_comision
+      FROM reservas_tours
+      WHERE precio_ingreso IS NOT NULL AND precio_ingreso > 0
+        AND (cxc_total IS NULL OR cxc_total = 0)
+    `).all();
+    if (toursToBackfill.length > 0) {
+      const updateCxC = db.prepare(`
+        UPDATE reservas_tours SET cxc_subtotal = ?, cxc_itbm = ?, cxc_total = ?, cxc_estatus = COALESCE(cxc_estatus, 'Sin Factura')
+        WHERE id = ?
+      `);
+      const backfillTx = db.transaction(() => {
+        for (const t of toursToBackfill) {
+          const precio = t.precio_ingreso || 0;
+          const comPct = t.comision_pct || 0;
+          const comision = t.monto_comision || (precio * comPct / 100);
+          const subtotal = Math.round((precio - comision) * 100) / 100;
+          const itbm = Math.round((subtotal * 0.07) * 100) / 100;
+          const total = Math.round((subtotal + itbm) * 100) / 100;
+          updateCxC.run(subtotal, itbm, total, t.id);
+        }
+      });
+      backfillTx();
+      console.log(`✅ CxC backfill: ${toursToBackfill.length} tours updated`);
+    }
+
     // Product catalog columns for actividades
     addCol('actividades', 'categoria', 'TEXT');
     addCol('actividades', 'descripcion', 'TEXT');
