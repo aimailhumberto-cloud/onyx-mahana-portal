@@ -2742,23 +2742,15 @@ app.get('/api/v1/public/productos/:slug', publicRateLimit(60), (req, res) => {
     const producto = db.prepare(`
       SELECT id, nombre, slug, tipo, precio_base, categoria, descripcion, 
              duracion, duracion_min, horario, punto_encuentro, que_incluye, 
-             que_llevar, requisitos, capacidad_max, imagen_url, sitios
+             que_llevar, requisitos, capacidad_max, imagen_url, sitios, modo_booking
       FROM actividades 
       WHERE slug = ? AND activa = 1 AND visible_web = 1
     `).get(req.params.slug);
     
     if (!producto) return error(res, 'NOT_FOUND', 'Producto no encontrado', 404);
 
-    // Determine booking mode from product's sitios config
-    let modo_booking = 'agente'; // default = agent mode
-    if (producto.sitios) {
-      try {
-        const sitios = JSON.parse(producto.sitios);
-        if (sitios.includes('mahanatours') || sitios.includes('ans-surf')) {
-          modo_booking = 'directo'; // direct PayPal booking
-        }
-      } catch {}
-    }
+    // Use product's modo_booking from DB (default: 'directo' = calendar flow)
+    const modo_booking = producto.modo_booking || 'directo';
     
     // Get PayPal config (public - only expose client ID and enabled status)
     const paypalEnabled = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_enabled'").get();

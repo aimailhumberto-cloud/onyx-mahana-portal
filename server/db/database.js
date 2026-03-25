@@ -105,11 +105,12 @@ function getDb() {
     // Product image support
     addCol('actividades', 'imagen_url', 'TEXT');
 
-    // Booking system: slug, multi-site, web visibility, duration in minutes
+    // Booking system: slug, multi-site, web visibility, duration in minutes, booking mode
     addCol('actividades', 'slug', 'TEXT');
     addCol('actividades', 'sitios', "TEXT DEFAULT '[]'"); // JSON array, e.g. ["mahanatours","ans-surf"]
     addCol('actividades', 'visible_web', 'INTEGER DEFAULT 0');
     addCol('actividades', 'duracion_min', 'INTEGER'); // duration in minutes for slot calculation
+    addCol('actividades', 'modo_booking', "TEXT DEFAULT 'directo'"); // 'directo' = calendar+pay, 'agente' = contact form
 
     // Timestamps for actividades (update() always sets updated_at)
     addCol('actividades', 'created_at', "TEXT DEFAULT (datetime('now'))");
