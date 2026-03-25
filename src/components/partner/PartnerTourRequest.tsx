@@ -1,25 +1,45 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getActividades, getDisponibilidad, createTour, uploadFile } from '../../api/api'
-import type { Actividad, Slot } from '../../api/api'
-import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle, Search, ImageIcon } from 'lucide-react'
+import { getActividades, createTour, uploadFile } from '../../api/api'
+import type { Actividad } from '../../api/api'
+import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle, Search, ImageIcon, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+
+const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const DAYS_HEADER = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb']
+const API_BASE = (import.meta.env.VITE_API_URL || '/api/v1') + '/public'
+
+async function fetchPublic(path: string) {
+  const res = await fetch(`${API_BASE}${path}`)
+  return res.json()
+}
+
+interface DayAvail { estado: string; disponibles: number; total_slots: number }
+interface SlotAvail { id: number; hora: string; disponibles: number; capacidad: number }
 
 export default function PartnerTourRequest() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [step, setStep] = useState(1) // 1=activity, 2=date+slot, 3=details, 4=confirm
+  const [step, setStep] = useState(1) // 1=activity, 2=calendar, 3=slots, 4=details, 5=confirm
   const [actividades, setActividades] = useState<Actividad[]>([])
-  const [slots, setSlots] = useState<Slot[]>([])
   const [loadingActs, setLoadingActs] = useState(true)
-  const [loadingSlots, setLoadingSlots] = useState(false)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   const [selectedAct, setSelectedAct] = useState<Actividad | null>(null)
+
+  // Calendar state
+  const now = new Date()
+  const [viewYear, setViewYear] = useState(now.getFullYear())
+  const [viewMonth, setViewMonth] = useState(now.getMonth() + 1)
+  const [dias, setDias] = useState<Record<string, DayAvail>>({})
   const [selectedDate, setSelectedDate] = useState('')
-  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null)
+
+  // Slot state
+  const [slots, setSlots] = useState<SlotAvail[]>([])
+  const [selectedSlot, setSelectedSlot] = useState<SlotAvail | null>(null)
+  const [loadingSlots, setLoadingSlots] = useState(false)
 
   const [form, setForm] = useState({
     cliente: '',
@@ -51,30 +71,55 @@ export default function PartnerTourRequest() {
     })
   }, [])
 
-  // Load slots when date changes
+  // Load month availability when product selected
+  const monthStr = `${viewYear}-${String(viewMonth).padStart(2, '0')}`
   useEffect(() => {
-    if (selectedDate && selectedAct) {
-      setLoadingSlots(true)
-      setSelectedSlot(null)
-      getDisponibilidad({ fecha: selectedDate }).then(res => {
-        if (res.success) {
-          const filtered = res.data.filter(s => s.actividad_id === selectedAct.id && !s.bloqueado && s.reservados < s.capacidad)
-          setSlots(filtered)
-        }
-        setLoadingSlots(false)
-      })
+    if (!selectedAct?.slug) return
+    fetchPublic(`/disponibilidad/${selectedAct.slug}?mes=${monthStr}`).then(res => {
+      if (res.success) setDias(res.data.dias || {})
+    }).catch(() => {})
+  }, [selectedAct, monthStr])
+
+  // Calendar helpers
+  const navigateMonth = (dir: number) => {
+    let m = viewMonth + dir, y = viewYear
+    if (m > 12) { m = 1; y++ }
+    if (m < 1) { m = 12; y-- }
+    setViewMonth(m); setViewYear(y)
+  }
+  const daysInMonth = new Date(viewYear, viewMonth, 0).getDate()
+  const firstDay = new Date(viewYear, viewMonth - 1, 1).getDay()
+
+  // Load day slots
+  const loadSlots = useCallback(async (fecha: string) => {
+    if (!selectedAct?.slug) return
+    setLoadingSlots(true)
+    const res = await fetchPublic(`/slots/${selectedAct.slug}?fecha=${fecha}`)
+    if (res.success) {
+      setSlots(res.data.slots.filter((s: SlotAvail) => s.disponibles > 0))
     }
-  }, [selectedDate, selectedAct])
+    setLoadingSlots(false)
+  }, [selectedAct])
+
+  const handleSelectDate = (dateStr: string) => {
+    const info = dias[dateStr]
+    if (!info || info.estado !== 'disponible') return
+    setSelectedDate(dateStr)
+    loadSlots(dateStr)
+    setStep(3) // go to slots
+  }
+
+  const handleSelectSlot = (slot: SlotAvail) => {
+    setSelectedSlot(slot)
+    setStep(4) // go to details form
+  }
 
   const handleSelectActivity = (act: Actividad) => {
     setSelectedAct(act)
     setStep(2)
   }
 
-  const handleSelectSlot = (slot: Slot) => {
-    setSelectedSlot(slot)
-    setStep(3)
-  }
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -125,7 +170,7 @@ export default function PartnerTourRequest() {
         cliente: form.cliente,
         whatsapp: form.whatsapp,
         actividad: selectedAct.nombre,
-        fecha: selectedSlot?.fecha || selectedDate,
+        fecha: selectedDate,
         hora: selectedSlot?.hora || '',
         notas: form.notas,
         pax: parseInt(form.pax) || 1,
@@ -146,7 +191,7 @@ export default function PartnerTourRequest() {
       const res = await createTour(data)
       if (res.success) {
         setResult({ type: 'success', message: `¡Tour solicitado! ID: ${res.data?.id}. Mahana lo confirmará pronto.` })
-        setStep(4)
+        setStep(5)
       } else {
         setResult({ type: 'error', message: res.error?.message || 'Error al solicitar tour' })
       }
@@ -192,16 +237,17 @@ export default function PartnerTourRequest() {
           <h1 className="text-2xl font-bold text-blue-900">Solicitar Tour</h1>
           <p className="text-sm text-gray-500">
             {step === 1 && 'Paso 1: Elige una actividad'}
-            {step === 2 && 'Paso 2: Selecciona fecha y horario'}
-            {step === 3 && 'Paso 3: Datos del cliente y pago'}
-            {step === 4 && '¡Solicitud enviada!'}
+            {step === 2 && 'Paso 2: Selecciona fecha'}
+            {step === 3 && 'Paso 3: Elige horario'}
+            {step === 4 && 'Paso 4: Datos del cliente y pago'}
+            {step === 5 && '¡Solicitud enviada!'}
           </p>
         </div>
       </div>
 
       {/* Steps indicator */}
       <div className="flex items-center gap-2">
-        {[1, 2, 3].map(s => (
+        {[1, 2, 3, 4].map(s => (
           <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${s <= step ? 'bg-blue-600' : 'bg-gray-200'}`} />
         ))}
       </div>
@@ -283,82 +329,126 @@ export default function PartnerTourRequest() {
         </div>
       )}
 
-      {/* Step 2: Select Date + Slot */}
+      {/* Step 2: Monthly Calendar */}
       {step === 2 && selectedAct && (
-        <div className="bg-white rounded-xl shadow-sm p-6 space-y-5">
-          <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold">
-              {selectedAct.nombre.charAt(0)}
-            </div>
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          {/* Product header */}
+          <div className="flex items-center gap-3 p-4 border-b border-gray-100">
+            {selectedAct.imagen_url ? (
+              <img src={selectedAct.imagen_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
+            ) : (
+              <div className="w-12 h-12 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 font-bold text-lg">
+                {selectedAct.nombre.charAt(0)}
+              </div>
+            )}
             <div>
               <h3 className="font-semibold text-gray-900">{selectedAct.nombre}</h3>
-              <p className="text-sm text-gray-500">{selectedAct.duracion}</p>
+              <p className="text-sm text-gray-500">{selectedAct.duracion} {selectedAct.precio_base ? `· $${selectedAct.precio_base}` : ''}</p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Selecciona una fecha</label>
-            <input
-              type="date"
-              min={today}
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="p-4">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-4">
+              <button onClick={() => navigateMonth(-1)} className="p-2 rounded-lg hover:bg-gray-100">
+                <ChevronLeft className="w-5 h-5 text-gray-600" />
+              </button>
+              <h3 className="text-lg font-semibold text-gray-900">{MONTHS[viewMonth - 1]} {viewYear}</h3>
+              <button onClick={() => navigateMonth(1)} className="p-2 rounded-lg hover:bg-gray-100">
+                <ChevronRight className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* Day headers */}
+            <div className="grid grid-cols-7 mb-2">
+              {DAYS_HEADER.map(d => (
+                <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">{d}</div>
+              ))}
+            </div>
+
+            {/* Day cells */}
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: firstDay }).map((_, i) => (
+                <div key={`e-${i}`} />
+              ))}
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const day = i + 1
+                const dateStr = `${viewYear}-${String(viewMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                const info = dias[dateStr]
+                const available = info?.estado === 'disponible'
+                const past = new Date(dateStr) < new Date(new Date().toDateString())
+                return (
+                  <button key={day} disabled={!available || past}
+                    onClick={() => handleSelectDate(dateStr)}
+                    className={`aspect-square rounded-lg flex flex-col items-center justify-center text-sm font-medium transition-all
+                      ${available && !past ? 'hover:bg-blue-50 hover:border-blue-300 border border-gray-200 cursor-pointer text-gray-900' : ''}
+                      ${past || !info ? 'text-gray-300 cursor-default' : ''}
+                      ${info && !available && !past ? 'text-gray-400 cursor-default' : ''}
+                      ${selectedDate === dateStr ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' : ''}`}
+                  >
+                    <span>{day}</span>
+                    {available && !past && <span className="text-[8px] text-blue-500 -mt-0.5">{info.disponibles}</span>}
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
-          {selectedDate && (
+          {/* Legend */}
+          <div className="px-4 pb-3 flex items-center gap-4 text-[10px] text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Disponible</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-300" /> Sin cupos</span>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Select Slot */}
+      {step === 3 && selectedAct && (
+        <div className="bg-white rounded-xl shadow-sm p-6 space-y-4">
+          <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+            <Calendar className="w-5 h-5 text-blue-600" />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Horarios disponibles</label>
-              {loadingSlots ? (
-                <div className="flex items-center justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
-              ) : slots.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {slots.map(slot => (
-                    <button
-                      key={slot.id}
-                      onClick={() => handleSelectSlot(slot)}
-                      className="p-3 border rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all text-center group"
-                    >
-                      <p className="font-semibold text-gray-900 group-hover:text-blue-700">{slot.hora}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {slot.capacidad - slot.reservados} de {slot.capacidad} cupos
-                      </p>
-                      <div className="w-full bg-gray-200 rounded-full h-1 mt-1.5">
-                        <div
-                          className="bg-blue-500 rounded-full h-1 transition-all"
-                          style={{ width: `${(slot.reservados / slot.capacidad) * 100}%` }}
-                        />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-6 text-gray-400">
-                  <p>No hay horarios disponibles para esta fecha</p>
-                  <p className="text-sm mt-1">Puedes continuar sin horario específico</p>
-                  <button
-                    onClick={() => setStep(3)}
-                    className="mt-3 text-blue-600 font-medium text-sm hover:underline"
-                  >
-                    Continuar sin horario →
-                  </button>
-                </div>
-              )}
+              <h3 className="font-semibold text-gray-900">{selectedAct.nombre}</h3>
+              <p className="text-sm text-blue-600">{selectedDate}</p>
+            </div>
+          </div>
+
+          <p className="text-sm font-medium text-gray-700">Horarios disponibles</p>
+          {loadingSlots ? (
+            <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
+          ) : slots.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {slots.map(slot => (
+                <button key={slot.id} onClick={() => handleSelectSlot(slot)}
+                  className="p-3 border border-gray-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all text-center group">
+                  <p className="font-semibold text-gray-900 group-hover:text-blue-700">{slot.hora}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{slot.disponibles} de {slot.capacidad} cupos</p>
+                  <div className="w-full bg-gray-200 rounded-full h-1 mt-1.5">
+                    <div className="bg-blue-500 rounded-full h-1 transition-all"
+                      style={{ width: `${((slot.capacidad - slot.disponibles) / slot.capacidad) * 100}%` }} />
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-gray-400">
+              <p>No hay horarios disponibles para esta fecha</p>
+              <button onClick={() => { setStep(2); setSelectedDate('') }}
+                className="mt-3 text-blue-600 font-medium text-sm hover:underline">← Elegir otra fecha</button>
             </div>
           )}
         </div>
       )}
 
-      {/* Step 3: Client Details + Comprobante */}
-      {step === 3 && (
+      {/* Step 4: Client Details + Comprobante */}
+      {step === 4 && (
         <div className="bg-white rounded-xl shadow-sm p-6 space-y-5">
           {/* Summary */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
             <p className="font-semibold text-blue-900">{selectedAct?.nombre}</p>
             <p className="text-sm text-blue-700">
-              {selectedSlot ? `${selectedSlot.fecha} a las ${selectedSlot.hora}` : selectedDate || 'Sin fecha definida'}
-              {selectedSlot && ` · ${selectedSlot.capacidad - selectedSlot.reservados} cupos disponibles`}
+              {selectedSlot ? `${selectedDate} a las ${selectedSlot.hora}` : selectedDate || 'Sin fecha definida'}
+              {selectedSlot && ` · ${selectedSlot.disponibles} cupos disponibles`}
             </p>
           </div>
 
@@ -474,7 +564,7 @@ export default function PartnerTourRequest() {
                 type="number"
                 required
                 min="1"
-                max={selectedSlot ? (selectedSlot.capacidad - selectedSlot.reservados) : 20}
+                max={selectedSlot ? selectedSlot.disponibles : 20}
                 value={form.pax}
                 onChange={e => onChange('pax', e.target.value)}
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -587,8 +677,8 @@ export default function PartnerTourRequest() {
         </div>
       )}
 
-      {/* Step 4: Success */}
-      {step === 4 && result?.type === 'success' && (
+      {/* Step 5: Success */}
+      {step === 5 && result?.type === 'success' && (
         <div className="text-center py-8">
           <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
