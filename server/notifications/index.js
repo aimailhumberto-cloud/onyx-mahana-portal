@@ -331,6 +331,42 @@ async function verifyAll() {
   return results;
 }
 
+// ── Booking Events (Public) ──
+
+async function onBookingCreated(booking) {
+  const results = {};
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+  
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatNewBooking(booking));
+    } catch (err) {
+      console.error('🔔 Notification error (telegram/booking):', err.message);
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+  
+  console.log(`🔔 Booking notification #${booking.codigo}:`, JSON.stringify(results));
+  return results;
+}
+
+async function onBookingPaid(booking) {
+  const results = {};
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+  
+  if (tgChatId) {
+    try {
+      results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatBookingPaid(booking));
+    } catch (err) {
+      console.error('🔔 Notification error (telegram/booking-paid):', err.message);
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+  
+  console.log(`🔔 Booking paid #${booking.codigo}:`, JSON.stringify(results));
+  return results;
+}
+
 module.exports = {
   initialize,
   onTourCreated,
@@ -338,6 +374,8 @@ module.exports = {
   onTourStatusChanged,
   onEstadiaCreated,
   onEstadiaStatusChanged,
+  onBookingCreated,
+  onBookingPaid,
   sendDailyReminders,
   sendDailySummary,
   verifyAll,

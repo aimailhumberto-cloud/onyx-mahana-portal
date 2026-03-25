@@ -2915,6 +2915,13 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente_agente', 'agente', ?, datetime('now'))
       `).run(codigo, producto.id, slug, fecha || 'por_definir', hora || 'por_definir', personas, nombre, email, wapp || '', notas || '', (producto.precio_base || 0) * personas);
       
+      // Send Telegram notification (async)
+      notifications.onBookingCreated({
+        codigo, producto: producto.nombre, slug, fecha: fecha || 'por_definir', hora: hora || 'por_definir',
+        personas, nombre, email, whatsapp: wapp, precio_total: (producto.precio_base || 0) * personas,
+        estado: 'pendiente_agente', modo: 'agente'
+      }).catch(err => console.error('Booking notification error:', err.message));
+      
       return success(res, {
         codigo,
         estado: 'pendiente_agente',
@@ -2922,6 +2929,9 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
         producto: producto.nombre,
       }, null, 201);
     }
+    // (Agent mode notification - async, don't block response)
+    // We send it after response since return above exits
+    
     
     // Direct booking mode — verify slot availability
     if (!slot_id && (!fecha || !hora)) {
@@ -2968,6 +2978,13 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
       precio_total: precioTotal,
       moneda: 'USD',
     }, null, 201);
+    
+    // Send Telegram notification (async, don't block response)
+    notifications.onBookingCreated({
+      codigo, producto: producto.nombre, slug, fecha: slot.fecha, hora: slot.hora,
+      personas, nombre, email, whatsapp: wapp, precio_total: precioTotal,
+      estado: 'pendiente_pago', modo: 'directo'
+    }).catch(err => console.error('Booking notification error:', err.message));
   } catch (err) {
     console.error('Error creating booking:', err);
     error(res, 'SERVER_ERROR', 'Error al crear reserva', 500);
@@ -3024,11 +3041,10 @@ app.post('/api/v1/public/pago/confirmar', publicRateLimit(10), (req, res) => {
       WHERE codigo = ?
     `).run(paypal_order_id || '', paypal_payer_id || '', codigo);
     
-    // Send notification to admin
-    try {
-      const msg = `🎉 *Nueva reserva pagada*\n📋 Código: ${codigo}\n🏷️ Producto: ${booking.slug}\n📅 ${booking.fecha} a las ${booking.hora}\n👥 ${booking.personas} persona(s)\n👤 ${booking.nombre}\n📱 ${booking.whatsapp || 'N/A'}\n💰 $${booking.precio_total} USD`;
-      notifications.sendAlert(msg).catch(() => {});
-    } catch {}
+    // Send Telegram notification (async)
+    notifications.onBookingPaid({
+      ...booking, paypal_order_id: paypal_order_id || '',
+    }).catch(err => console.error('Booking paid notification error:', err.message));
     
     success(res, {
       codigo,

@@ -147,6 +147,42 @@ function getStatus() {
   };
 }
 
+// ── Booking (Public) Messages ──
+
+function formatNewBooking(booking) {
+  const emoji = booking.modo === 'agente' ? '📩' : '🛒';
+  return [
+    `${emoji} *Nueva Reserva Web*`,
+    ``,
+    `📋 Código: \`${booking.codigo}\``,
+    `🏷️ *${escape(booking.producto || booking.slug || '—')}*`,
+    `👤 ${escape(booking.nombre || '—')}`,
+    `📧 ${escape(booking.email || '—')}`,
+    booking.whatsapp ? `📱 ${escape(booking.whatsapp)}` : '',
+    `📅 ${escape(booking.fecha || '—')} ⏰ ${escape(booking.hora || '—')}`,
+    `👥 ${booking.personas || 1} persona(s)`,
+    booking.precio_total ? `💰 $${booking.precio_total} USD` : '',
+    `📊 Estado: ${escape(booking.estado || 'pendiente')}`,
+    `🌐 Modo: ${booking.modo === 'agente' ? 'Agente (lead)' : 'Directo (pago)'}`,
+  ].filter(Boolean).join('\n');
+}
+
+function formatBookingPaid(booking) {
+  return [
+    `🎉 *¡Reserva Pagada!*`,
+    ``,
+    `📋 Código: \`${booking.codigo}\``,
+    `🏷️ *${escape(booking.producto || booking.slug || '—')}*`,
+    `👤 ${escape(booking.nombre || '—')}`,
+    `📧 ${escape(booking.email || '—')}`,
+    booking.whatsapp ? `📱 ${escape(booking.whatsapp)}` : '',
+    `📅 ${escape(booking.fecha || '—')} ⏰ ${escape(booking.hora || '—')}`,
+    `👥 ${booking.personas || 1} persona(s)`,
+    `💰 *$${booking.precio_total || 0} USD*`,
+    booking.paypal_order_id ? `🅿️ PayPal: ${escape(booking.paypal_order_id)}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 module.exports = {
   sendTelegram,
   formatNewTour,
@@ -155,6 +191,8 @@ module.exports = {
   formatDailySummary,
   formatNewEstadia,
   formatEstadiaStatus,
+  formatNewBooking,
+  formatBookingPaid,
   getUpdates,
   getStatus,
   TELEGRAM_CHAT_ID,
