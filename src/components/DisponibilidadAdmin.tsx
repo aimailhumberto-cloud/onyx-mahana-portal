@@ -332,7 +332,7 @@ export default function DisponibilidadAdmin() {
       </div>
 
       {/* Producto selector */}
-      <div className="bg-white rounded-xl shadow-sm p-3 border border-gray-100">
+      <div className="bg-white rounded-xl shadow-sm p-3 border border-gray-100 space-y-2">
         <div className="flex items-center gap-3 overflow-x-auto pb-1">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">Producto:</span>
           {actividades.map(a => (
@@ -343,14 +343,18 @@ export default function DisponibilidadAdmin() {
               {a.nombre}
             </button>
           ))}
-          {selectedAct?.slug && (
+        </div>
+        {selectedAct?.slug && (
+          <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+            <span className="text-xs text-gray-400">Página pública:</span>
             <a href={`/booking/${selectedAct.slug}`} target="_blank" rel="noopener noreferrer"
-              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5 shrink-0"
+              className="px-3 py-1 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5"
               title={`Abrir /booking/${selectedAct.slug}`}>
               🌐 Ver Booking Page ↗
             </a>
-          )}
-        </div>
+            <code className="text-[10px] text-gray-400 ml-1">/booking/{selectedAct.slug}</code>
+          </div>
+        )}
       </div>
 
       {/* Result toast */}
