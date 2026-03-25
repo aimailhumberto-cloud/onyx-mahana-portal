@@ -308,6 +308,33 @@ function getDb() {
       console.log(`⚠️ Fixed ${brokenPartners.length} partner user(s) with missing vendedor → set to 'Playa Caracol'`);
     }
 
+    // ── Reservas Booking (public bookings) ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS reservas_booking (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT NOT NULL UNIQUE,
+        actividad_id INTEGER NOT NULL,
+        slug TEXT NOT NULL,
+        fecha TEXT NOT NULL,
+        hora TEXT NOT NULL,
+        personas INTEGER NOT NULL DEFAULT 1,
+        nombre TEXT NOT NULL,
+        email TEXT NOT NULL,
+        whatsapp TEXT DEFAULT '',
+        notas TEXT DEFAULT '',
+        estado TEXT NOT NULL DEFAULT 'pendiente_pago',
+        modo TEXT NOT NULL DEFAULT 'directo',
+        slot_id INTEGER,
+        precio_total REAL DEFAULT 0,
+        paypal_order_id TEXT DEFAULT '',
+        paypal_payer_id TEXT DEFAULT '',
+        paid_at TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (actividad_id) REFERENCES actividades(id),
+        FOREIGN KEY (slot_id) REFERENCES horarios_slots(id)
+      );
+    `);
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;
@@ -315,7 +342,7 @@ function getDb() {
 
 // ── Table whitelist (prevents SQL injection via table names) ──
 
-const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones', 'bloqueos_fechas', 'reservas_config', 'configuracion_pagos'];
+const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones', 'bloqueos_fechas', 'reservas_config', 'configuracion_pagos', 'reservas_booking'];
 
 function validateTable(table) {
   if (!VALID_TABLES.includes(table)) {

@@ -19,6 +19,7 @@ import DisponibilidadAdmin from './components/DisponibilidadAdmin'
 import NotificacionesConfig from './components/NotificacionesConfig'
 import UsuariosAdmin from './components/UsuariosAdmin'
 import Facturacion from './components/Facturacion'
+import BookingPage from './components/BookingPage'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Loader2 } from 'lucide-react'
 
@@ -36,11 +37,12 @@ function AppRoutes() {
     )
   }
 
-  // Not authenticated → show login
+  // Not authenticated → show login + public booking routes
   if (!user) {
     return (
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/booking/:slug" element={<BookingPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
@@ -86,6 +88,7 @@ function AppRoutes() {
         <Route path="facturacion" element={<AdminOnly><Facturacion /></AdminOnly>} />
         <Route path="admin" element={<AdminOnly><AdminPanel /></AdminOnly>} />
       </Route>
+      <Route path="/booking/:slug" element={<BookingPage />} />
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
