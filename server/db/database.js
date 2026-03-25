@@ -132,6 +132,16 @@ function getDb() {
       console.error('⚠️ Slug generation failed (non-fatal):', err.message);
     }
 
+    // Auto-enable visible_web for active products that have it unset (migration for Render)
+    try {
+      const updated = db.prepare("UPDATE actividades SET visible_web = 1 WHERE activa = 1 AND (visible_web IS NULL OR visible_web = 0)").run();
+      if (updated.changes > 0) {
+        console.log(`✅ Auto-enabled visible_web for ${updated.changes} active products`);
+      }
+    } catch (err) {
+      console.error('⚠️ visible_web migration failed (non-fatal):', err.message);
+    }
+
     // Rename old categories to new names
     const renameCat = (oldName, newName) => {
       db.prepare('UPDATE actividades SET categoria = ? WHERE categoria = ?').run(newName, oldName);
