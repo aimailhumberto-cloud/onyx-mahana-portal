@@ -232,7 +232,7 @@ export default function BookingPage() {
                 )}
                 <div className="flex flex-wrap items-center gap-3 mt-3">
                   <span className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-medium px-2.5 py-1 rounded-full">
-                    <CreditCard className="w-3.5 h-3.5" />${producto.precio_base} USD / persona
+                    <CreditCard className="w-3.5 h-3.5" />{producto.precio_base ? `$${producto.precio_base} USD / persona` : 'Precio: Consultar'}
                   </span>
                   {producto.duracion && (
                     <span className="flex items-center gap-1 bg-white/20 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
@@ -256,7 +256,7 @@ export default function BookingPage() {
                 )}
                 <div className="flex flex-wrap items-center gap-3 mt-3">
                   <span className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-medium px-2.5 py-1 rounded-full">
-                    <CreditCard className="w-3.5 h-3.5" />${producto.precio_base} USD / persona
+                    <CreditCard className="w-3.5 h-3.5" />{producto.precio_base ? `$${producto.precio_base} USD / persona` : 'Precio: Consultar'}
                   </span>
                   {producto.duracion && (
                     <span className="flex items-center gap-1 bg-white/20 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
@@ -416,7 +416,7 @@ export default function BookingPage() {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className="text-lg font-bold text-teal-700">${producto.precio_base}</p>
+                  <p className="text-lg font-bold text-teal-700">{producto.precio_base ? `$${producto.precio_base}` : 'Consultar'}</p>
                   <p className="text-[10px] text-gray-400">USD / persona</p>
                 </div>
               </div>
@@ -485,7 +485,7 @@ export default function BookingPage() {
                   <p className="text-xs text-teal-600">{selectedDate} a las {selectedSlot?.hora}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-bold text-teal-800">${producto.precio_base}</p>
+                  <p className="font-bold text-teal-800">{producto.precio_base ? `$${producto.precio_base}` : 'Consultar'}</p>
                   <p className="text-[9px] text-teal-500">/ persona</p>
                 </div>
               </div>
@@ -518,7 +518,7 @@ export default function BookingPage() {
                 <div className="flex items-end pb-5">
                   <div className="bg-gray-50 rounded-xl px-4 py-2.5 w-full text-center">
                     <p className="text-xs text-gray-500">Total</p>
-                    <p className="text-xl font-bold text-teal-700">${(producto.precio_base * form.personas).toFixed(2)}</p>
+                    <p className="text-xl font-bold text-teal-700">${((producto.precio_base || 0) * form.personas).toFixed(2)}</p>
                   </div>
                 </div>
               </div>
@@ -530,7 +530,7 @@ export default function BookingPage() {
               <button onClick={handleSubmit} disabled={submitting || !form.nombre || !form.email || form.personas < 1}
                 className="w-full py-3 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-teal-600/20">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                Continuar al Pago — ${(producto.precio_base * form.personas).toFixed(2)}
+                Continuar al Pago — ${((producto.precio_base || 0) * form.personas).toFixed(2)}
               </button>
             </div>
           </div>
