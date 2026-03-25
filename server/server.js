@@ -2815,9 +2815,14 @@ app.get('/api/v1/public/disponibilidad/:slug', publicRateLimit(60), (req, res) =
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${mes}-${String(d).padStart(2, '0')}`;
       const daySlots = slots.filter(s => s.fecha === dateStr && !s.bloqueado);
-      const cap = daySlots.reduce((sum, s) => sum + s.capacidad, 0);
-      const res_count = daySlots.reduce((sum, s) => sum + s.reservados, 0);
-      const disponibles = cap - res_count;
+      
+      // Time-level anticipation filtering (match /slots endpoint behavior)
+      const availableSlots = daySlots.filter(s => {
+        const slotTime = new Date(`${dateStr}T${s.hora}:00`);
+        return slotTime > minDate && (s.capacidad - s.reservados) > 0;
+      });
+      
+      const disponibles = availableSlots.reduce((sum, s) => sum + (s.capacidad - s.reservados), 0);
       const bloqueado = bloqueosSet.has(dateStr);
       const pasado = dateStr < minDateStr;
       
@@ -2827,7 +2832,7 @@ app.get('/api/v1/public/disponibilidad/:slug', publicRateLimit(60), (req, res) =
       else if (disponibles > 0) estado = 'disponible';
       else if (daySlots.length > 0) estado = 'lleno';
       
-      dias[dateStr] = { estado, disponibles: Math.max(disponibles, 0), total_slots: daySlots.length };
+      dias[dateStr] = { estado, disponibles: Math.max(disponibles, 0), total_slots: availableSlots.length };
     }
     
     success(res, { producto: producto.nombre, mes, dias });
@@ -2915,6 +2920,27 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente_agente', 'agente', ?, datetime('now'))
       `).run(codigo, producto.id, slug, fecha || 'por_definir', hora || 'por_definir', personas, nombre, email, wapp || '', notas || '', (producto.precio_base || 0) * personas);
       
+      // Create reservas_tours record for admin dashboard
+      try {
+        create('reservas_tours', {
+          cliente: nombre,
+          whatsapp: wapp || '',
+          email_cliente: email,
+          actividad: producto.nombre,
+          fecha: fecha || 'por_definir',
+          hora: hora || 'por_definir',
+          pax: personas,
+          notas: `[Web Lead] Código: ${codigo}. ${notas || ''}`,
+          fuente: 'web-agente',
+          estatus: 'Por Aprobar',
+          vendedor: 'Web Lead',
+          solicitado_por: 'Cliente Web',
+          gestionado_por: 'Sistema',
+        });
+      } catch (tourErr) {
+        console.error('Error creating admin tour record:', tourErr.message);
+      }
+      
       // Send Telegram notification (async)
       notifications.onBookingCreated({
         codigo, producto: producto.nombre, slug, fecha: fecha || 'por_definir', hora: hora || 'por_definir',
@@ -2929,9 +2955,6 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
         producto: producto.nombre,
       }, null, 201);
     }
-    // (Agent mode notification - async, don't block response)
-    // We send it after response since return above exits
-    
     
     // Direct booking mode — verify slot availability
     if (!slot_id && (!fecha || !hora)) {
@@ -2978,6 +3001,28 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
       precio_total: precioTotal,
       moneda: 'USD',
     }, null, 201);
+    
+    // Create reservas_tours record so it appears in admin dashboard
+    try {
+      create('reservas_tours', {
+        cliente: nombre,
+        whatsapp: wapp || '',
+        email_cliente: email,
+        actividad: producto.nombre,
+        fecha: slot.fecha,
+        hora: slot.hora,
+        pax: personas,
+        notas: `[Web Directa] Código: ${codigo}. ${notas || ''}`,
+        fuente: 'web-directo',
+        estatus: 'Pagado',
+        precio_ingreso: precioTotal,
+        vendedor: 'Web Directa',
+        solicitado_por: 'Cliente Web',
+        gestionado_por: 'Sistema',
+      });
+    } catch (tourErr) {
+      console.error('Error creating admin tour record:', tourErr.message);
+    }
     
     // Send Telegram notification (async, don't block response)
     notifications.onBookingCreated({
