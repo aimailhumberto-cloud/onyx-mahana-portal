@@ -1482,6 +1482,15 @@ app.post('/api/v1/actividades', requireAuth, requireRole('admin'), (req, res) =>
       }
     }
 
+    // Auto-generate slug from nombre if not provided
+    if (!data.slug && data.nombre) {
+      data.slug = data.nombre.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+    // Default visible_web to 1 for new products
+    if (data.visible_web === undefined) data.visible_web = 1;
+
     const item = create('actividades', data);
     success(res, item, null, 201);
   } catch (err) {
@@ -1510,6 +1519,13 @@ app.put('/api/v1/actividades/:id', requireAuth, requireRole('admin'), (req, res)
       if (req.body[field] !== undefined) {
         data[field] = typeof req.body[field] === 'string' ? sanitize(req.body[field]) : req.body[field];
       }
+    }
+
+    // Auto-regenerate slug when nombre changes
+    if (data.nombre && !data.slug) {
+      data.slug = data.nombre.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     }
 
     const updated = update('actividades', req.params.id, data);
