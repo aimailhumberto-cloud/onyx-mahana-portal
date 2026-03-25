@@ -12,6 +12,7 @@ interface ProductInfo {
   id: number; nombre: string; slug: string; precio_base: number; descripcion: string
   duracion: string; punto_encuentro: string; que_incluye: string; que_llevar: string
   requisitos: string; capacidad_max: number; imagen_url: string; modo_booking: string
+  sitios: string
   pago: { paypal_enabled: boolean; paypal_client_id: string | null; paypal_mode: string }
 }
 
@@ -201,20 +202,71 @@ export default function BookingPage() {
     )
   }
 
+  // Determine site theme based on sitios
+  const getSiteTheme = () => {
+    if (!producto) return { bg: 'from-teal-600 to-emerald-700', accent: 'teal' }
+    try {
+      const sitios = JSON.parse(producto.sitios || '[]')
+      if (sitios.includes('ans-surf')) return { bg: 'from-sky-600 to-blue-800', accent: 'sky' }
+      if (sitios.includes('circuitochame')) return { bg: 'from-amber-600 to-orange-700', accent: 'amber' }
+    } catch {}
+    return { bg: 'from-teal-600 to-emerald-700', accent: 'teal' }
+  }
+  const theme = getSiteTheme()
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-teal-50/30">
-      {/* Header */}
+      {/* Hero Header */}
       {!hideHeader && (
-        <div className="bg-white border-b border-gray-100 shadow-sm">
-          <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">{producto.nombre}</h1>
-              <p className="text-xs text-gray-500">{producto.duracion} · ${producto.precio_base} USD por persona</p>
+        <div className="relative overflow-hidden">
+          {producto.imagen_url ? (
+            <>
+              <div className="absolute inset-0">
+                <img src={producto.imagen_url} alt={producto.nombre} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70" />
+              </div>
+              <div className="relative max-w-2xl mx-auto px-4 py-8 sm:py-10">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white drop-shadow-lg">{producto.nombre}</h1>
+                {producto.descripcion && (
+                  <p className="text-sm text-white/80 mt-1.5 max-w-lg line-clamp-2">{producto.descripcion}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-3 mt-3">
+                  <span className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-medium px-2.5 py-1 rounded-full">
+                    <CreditCard className="w-3.5 h-3.5" />${producto.precio_base} USD / persona
+                  </span>
+                  {producto.duracion && (
+                    <span className="flex items-center gap-1 bg-white/20 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+                      <Clock className="w-3.5 h-3.5" />{producto.duracion}
+                    </span>
+                  )}
+                  {producto.punto_encuentro && (
+                    <span className="flex items-center gap-1 bg-white/20 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+                      <MapPin className="w-3.5 h-3.5" />{producto.punto_encuentro}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className={`bg-gradient-to-r ${theme.bg}`}>
+              <div className="max-w-2xl mx-auto px-4 py-8">
+                <h1 className="text-2xl font-bold text-white">{producto.nombre}</h1>
+                {producto.descripcion && (
+                  <p className="text-sm text-white/80 mt-1.5 max-w-lg line-clamp-2">{producto.descripcion}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-3 mt-3">
+                  <span className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm text-white text-xs font-medium px-2.5 py-1 rounded-full">
+                    <CreditCard className="w-3.5 h-3.5" />${producto.precio_base} USD / persona
+                  </span>
+                  {producto.duracion && (
+                    <span className="flex items-center gap-1 bg-white/20 backdrop-blur-sm text-white text-xs px-2.5 py-1 rounded-full">
+                      <Clock className="w-3.5 h-3.5" />{producto.duracion}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-            {producto.imagen_url && (
-              <img src={producto.imagen_url} alt="" className="w-12 h-12 rounded-lg object-cover" />
-            )}
-          </div>
+          )}
         </div>
       )}
 

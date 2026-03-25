@@ -343,6 +343,13 @@ export default function DisponibilidadAdmin() {
               {a.nombre}
             </button>
           ))}
+          {selectedAct?.slug && (
+            <a href={`/booking/${selectedAct.slug}`} target="_blank" rel="noopener noreferrer"
+              className="ml-auto px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5 shrink-0"
+              title={`Abrir /booking/${selectedAct.slug}`}>
+              🌐 Ver Booking Page ↗
+            </a>
+          )}
         </div>
       </div>
 
