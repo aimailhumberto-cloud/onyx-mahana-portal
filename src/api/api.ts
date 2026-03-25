@@ -108,6 +108,11 @@ export interface Actividad {
   capacidad_max: number | null
   transporte: number | null
   imagen_url: string | null
+  // Booking system fields
+  slug: string | null
+  sitios: string | null  // JSON array e.g. '["mahanatours","ans-surf"]'
+  visible_web: number
+  duracion_min: number | null
 }
 
 export interface Propiedad {
@@ -154,6 +159,16 @@ export interface Plantilla {
   capacidad: number
   activa: number
   actividad_nombre?: string
+  fecha_inicio?: string | null
+  fecha_fin?: string | null
+}
+
+export interface Bloqueo {
+  id: number
+  actividad_id: number | null
+  fecha: string
+  motivo: string | null
+  created_at: string
 }
 
 export interface Meta {
@@ -469,6 +484,27 @@ export async function deletePlantilla(id: number): Promise<ApiResponse<{ deleted
 
 export async function generarSlotsMes(data: { mes: string; actividad_id?: number }): Promise<ApiResponse<{ created: number }>> {
   const response = await api.post('/plantillas/generar', data)
+  return response.data
+}
+
+// ── Availability: Bloqueos ──
+
+export async function getBloqueos(params: Record<string, string> = {}): Promise<ApiResponse<Bloqueo[]>> {
+  try {
+    const response = await api.get('/bloqueos', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function createBloqueo(data: Partial<Bloqueo>): Promise<ApiResponse<Bloqueo>> {
+  const response = await api.post('/bloqueos', data)
+  return response.data
+}
+
+export async function deleteBloqueo(id: number): Promise<ApiResponse<{ deleted: boolean }>> {
+  const response = await api.delete(`/bloqueos/${id}`)
   return response.data
 }
 

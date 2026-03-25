@@ -1473,7 +1473,8 @@ app.post('/api/v1/actividades', requireAuth, requireRole('admin'), (req, res) =>
       'categoria', 'descripcion', 'unidad', 'duracion', 'horario',
       'punto_encuentro', 'que_incluye', 'que_llevar', 'requisitos',
       'disponibilidad', 'costo_instructor', 'comision_caracol_pct',
-      'capacidad_max', 'transporte', 'imagen_url'];
+      'capacidad_max', 'transporte', 'imagen_url',
+      'slug', 'sitios', 'visible_web', 'duracion_min'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined && req.body[field] !== null) {
@@ -1502,7 +1503,8 @@ app.put('/api/v1/actividades/:id', requireAuth, requireRole('admin'), (req, res)
       'categoria', 'descripcion', 'unidad', 'duracion', 'horario',
       'punto_encuentro', 'que_incluye', 'que_llevar', 'requisitos',
       'disponibilidad', 'costo_instructor', 'comision_caracol_pct',
-      'capacidad_max', 'transporte', 'imagen_url'];
+      'capacidad_max', 'transporte', 'imagen_url',
+      'slug', 'sitios', 'visible_web', 'duracion_min'];
 
     for (const field of allowed) {
       if (req.body[field] !== undefined) {
@@ -1876,6 +1878,344 @@ app.delete('/api/v1/slots/:id', requireAuth, requireRole('admin', 'vendedor'), (
   }
 });
 
+// ══════════════════════════════════════
+// AI-AGENT-FRIENDLY ENDPOINTS
+// ══════════════════════════════════════
+
+// GET full month availability in 1 call (instead of 31 individual requests)
+app.get('/api/v1/disponibilidad/mes', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const { mes, actividad_id } = req.query; // mes = '2026-04'
+    if (!mes || !/^\d{4}-\d{2}$/.test(mes)) {
+      return error(res, 'VALIDATION_ERROR', 'Parámetro mes requerido (formato: YYYY-MM)', 400);
+    }
+
+    const year = parseInt(mes.split('-')[0]);
+    const month = parseInt(mes.split('-')[1]);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const desde = `${mes}-01`;
+    const hasta = `${mes}-${String(daysInMonth).padStart(2, '0')}`;
+
+    let sql = `
+      SELECT s.*, a.nombre as actividad_nombre
+      FROM horarios_slots s
+      JOIN actividades a ON a.id = s.actividad_id
+      WHERE s.fecha >= ? AND s.fecha <= ?
+    `;
+    const params = [desde, hasta];
+    if (actividad_id) {
+      sql += ' AND s.actividad_id = ?';
+      params.push(actividad_id);
+    }
+    sql += ' ORDER BY s.fecha, a.nombre, s.hora';
+
+    const slots = db.prepare(sql).all(...params);
+
+    // Build day summary
+    const daySummary = {};
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${mes}-${String(d).padStart(2, '0')}`;
+      const daySlots = slots.filter(s => s.fecha === dateStr);
+      const totalCap = daySlots.reduce((sum, s) => sum + s.capacidad, 0);
+      const totalRes = daySlots.reduce((sum, s) => sum + s.reservados, 0);
+      const blocked = daySlots.filter(s => s.bloqueado).length;
+      daySummary[dateStr] = {
+        slots: daySlots.length,
+        capacidad_total: totalCap,
+        reservados_total: totalRes,
+        disponibles: totalCap - totalRes,
+        bloqueados: blocked,
+        ocupacion_pct: totalCap > 0 ? Math.round((totalRes / totalCap) * 100) : 0,
+      };
+    }
+
+    // Bloqueos for the month
+    let bloqueosSql = 'SELECT * FROM bloqueos_fechas WHERE fecha >= ? AND fecha <= ?';
+    const blParams = [desde, hasta];
+    if (actividad_id) {
+      bloqueosSql += ' AND (actividad_id = ? OR actividad_id IS NULL)';
+      blParams.push(actividad_id);
+    }
+    const bloqueos = db.prepare(bloqueosSql).all(...blParams);
+
+    success(res, {
+      mes, desde, hasta,
+      total_slots: slots.length,
+      slots,
+      resumen_por_dia: daySummary,
+      bloqueos,
+    });
+  } catch (err) {
+    console.error('Error fetching month:', err);
+    error(res, 'SERVER_ERROR', 'Error fetching month data', 500);
+  }
+});
+
+// POST bulk create slots (create many at once)
+app.post('/api/v1/slots/bulk', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
+  try {
+    const { slots: slotsData } = req.body;
+    // Expect: { slots: [{ actividad_id, fecha, hora, capacidad? }, ...] }
+    if (!Array.isArray(slotsData) || slotsData.length === 0) {
+      return error(res, 'VALIDATION_ERROR', 'Se requiere un array "slots" con al menos 1 elemento', 400);
+    }
+    if (slotsData.length > 500) {
+      return error(res, 'VALIDATION_ERROR', 'Máximo 500 slots por llamada', 400);
+    }
+
+    const db = getDb();
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO horarios_slots (actividad_id, fecha, hora, capacidad, reservados, bloqueado)
+      VALUES (?, ?, ?, ?, 0, 0)
+    `);
+
+    let created = 0, skipped = 0, errors_list = [];
+
+    const transaction = db.transaction(() => {
+      for (const s of slotsData) {
+        if (!s.actividad_id || !s.fecha || !s.hora) {
+          errors_list.push({ slot: s, error: 'Faltan campos requeridos' });
+          continue;
+        }
+        try {
+          const result = insertStmt.run(s.actividad_id, s.fecha, s.hora, s.capacidad || 6);
+          if (result.changes > 0) created++;
+          else skipped++;
+        } catch (e) {
+          errors_list.push({ slot: s, error: e.message });
+        }
+      }
+    });
+
+    transaction();
+    success(res, {
+      created,
+      skipped,
+      errors: errors_list.length,
+      error_details: errors_list.length > 0 ? errors_list : undefined,
+      total_enviados: slotsData.length,
+    }, null, 201);
+  } catch (err) {
+    console.error('Error bulk creating slots:', err);
+    error(res, 'SERVER_ERROR', 'Error creating slots', 500);
+  }
+});
+
+// GET availability summary/alerts across all products (for AI dashboard)
+app.get('/api/v1/disponibilidad/resumen', requireAuth, (req, res) => {
+  try {
+    const db = getDb();
+    const hoy = new Date().toISOString().split('T')[0];
+    const en7dias = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const en30dias = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Products with active slots
+    const actividades = db.prepare('SELECT id, nombre, slug FROM actividades WHERE activa = 1').all();
+
+    const resumen = actividades.map(act => {
+      // Next 7 days
+      const slots7d = db.prepare(`
+        SELECT * FROM horarios_slots
+        WHERE actividad_id = ? AND fecha >= ? AND fecha <= ? AND bloqueado = 0
+      `).all(act.id, hoy, en7dias);
+
+      // Next 30 days
+      const slots30d = db.prepare(`
+        SELECT * FROM horarios_slots
+        WHERE actividad_id = ? AND fecha >= ? AND fecha <= ? AND bloqueado = 0
+      `).all(act.id, hoy, en30dias);
+
+      const cap7 = slots7d.reduce((s, sl) => s + sl.capacidad, 0);
+      const res7 = slots7d.reduce((s, sl) => s + sl.reservados, 0);
+      const cap30 = slots30d.reduce((s, sl) => s + sl.capacidad, 0);
+      const res30 = slots30d.reduce((s, sl) => s + sl.reservados, 0);
+
+      // Days without any slots in next 7 days
+      const diasConSlots = new Set(slots7d.map(s => s.fecha));
+      const diasSinSlots = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(Date.now() + i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        if (!diasConSlots.has(d)) diasSinSlots.push(d);
+      }
+
+      // Bloqueos próximos
+      const bloqueos = db.prepare(`
+        SELECT fecha, motivo FROM bloqueos_fechas
+        WHERE (actividad_id = ? OR actividad_id IS NULL) AND fecha >= ? AND fecha <= ?
+      `).all(act.id, hoy, en30dias);
+
+      // Determine alert level
+      let alerta = 'ok';
+      if (slots7d.length === 0) alerta = 'sin_slots_7d';
+      else if (cap7 > 0 && res7 / cap7 >= 0.9) alerta = 'casi_lleno_7d';
+      else if (cap7 > 0 && res7 / cap7 >= 0.7) alerta = 'alta_ocupacion_7d';
+
+      return {
+        actividad_id: act.id,
+        nombre: act.nombre,
+        slug: act.slug,
+        alerta,
+        proximos_7_dias: {
+          slots: slots7d.length,
+          capacidad: cap7,
+          reservados: res7,
+          disponibles: cap7 - res7,
+          ocupacion_pct: cap7 > 0 ? Math.round((res7 / cap7) * 100) : 0,
+          dias_sin_slots: diasSinSlots,
+        },
+        proximos_30_dias: {
+          slots: slots30d.length,
+          capacidad: cap30,
+          reservados: res30,
+          disponibles: cap30 - res30,
+          ocupacion_pct: cap30 > 0 ? Math.round((res30 / cap30) * 100) : 0,
+        },
+        bloqueos_proximos: bloqueos,
+      };
+    });
+
+    // Global alerts
+    const alertas = resumen.filter(r => r.alerta !== 'ok');
+
+    success(res, {
+      fecha_consulta: hoy,
+      total_productos: actividades.length,
+      productos_con_alerta: alertas.length,
+      alertas: alertas.map(a => `${a.nombre}: ${a.alerta}`),
+      detalle: resumen,
+    });
+  } catch (err) {
+    console.error('Error generating resumen:', err);
+    error(res, 'SERVER_ERROR', 'Error generating summary', 500);
+  }
+});
+
+// POST create plantillas from natural language description
+// Example: { actividad_id: 1, texto: "Lunes a Viernes 08:00-16:00 cada 60min 6 cupos" }
+app.post('/api/v1/plantillas/texto', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const { actividad_id, texto } = req.body;
+    if (!actividad_id || !texto) {
+      return error(res, 'VALIDATION_ERROR', 'actividad_id y texto son requeridos', 400);
+    }
+
+    const db = getDb();
+    const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // Parse days
+    const dayMap = {
+      'lunes': 1, 'martes': 2, 'miercoles': 3, 'jueves': 4,
+      'viernes': 5, 'sabado': 6, 'domingo': 0,
+      'lun': 1, 'mar': 2, 'mie': 3, 'jue': 4, 'vie': 5, 'sab': 6, 'dom': 0,
+    };
+
+    let dias = [];
+    // "lunes a viernes" pattern
+    const rangeMatch = t.match(/(lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)\s+a\s+(lunes|martes|miercoles|jueves|viernes|sabado|domingo|lun|mar|mie|jue|vie|sab|dom)/);
+    if (rangeMatch) {
+      const start = dayMap[rangeMatch[1]];
+      const end = dayMap[rangeMatch[2]];
+      if (start !== undefined && end !== undefined) {
+        if (start <= end) {
+          for (let d = start; d <= end; d++) dias.push(d);
+        } else {
+          // Wrap around (e.g., viernes a lunes)
+          for (let d = start; d <= 6; d++) dias.push(d);
+          for (let d = 0; d <= end; d++) dias.push(d);
+        }
+      }
+    }
+    // "lunes, miercoles, viernes" pattern
+    if (dias.length === 0) {
+      for (const [name, idx] of Object.entries(dayMap)) {
+        if (t.includes(name)) dias.push(idx);
+      }
+      dias = [...new Set(dias)];
+    }
+    // "todos los dias" or "toda la semana"
+    if (t.includes('todos los dias') || t.includes('toda la semana')) {
+      dias = [0, 1, 2, 3, 4, 5, 6];
+    }
+
+    if (dias.length === 0) {
+      return error(res, 'PARSE_ERROR', 'No se pudieron identificar los días. Usa: "Lunes a Viernes" o "Lunes, Miércoles, Viernes" o "Todos los días"', 400);
+    }
+
+    // Parse hours (08:00-16:00 or 8am-4pm)
+    const hourMatch = t.match(/(\d{1,2}:\d{2})\s*[-a]\s*(\d{1,2}:\d{2})/);
+    let horaDesde = '08:00', horaHasta = '16:00';
+    if (hourMatch) {
+      horaDesde = hourMatch[1].length === 4 ? '0' + hourMatch[1] : hourMatch[1];
+      horaHasta = hourMatch[2].length === 4 ? '0' + hourMatch[2] : hourMatch[2];
+    }
+
+    // Parse interval
+    let intervalo = 60;
+    const intMatch = t.match(/cada\s+(\d+)\s*(min|hora|h)/);
+    if (intMatch) {
+      const val = parseInt(intMatch[1]);
+      const unit = intMatch[2];
+      if (unit === 'hora' || unit === 'h') intervalo = val * 60;
+      else intervalo = val;
+    }
+
+    // Parse capacity
+    let capacidad = 6;
+    const capMatch = t.match(/(\d+)\s*(cupo|persona|pax|lugar)/);
+    if (capMatch) capacidad = parseInt(capMatch[1]);
+
+    // Generate time slots
+    const times = [];
+    const [fh, fm] = horaDesde.split(':').map(Number);
+    const [th, tm] = horaHasta.split(':').map(Number);
+    let current = fh * 60 + fm;
+    const end = th * 60 + tm;
+    while (current <= end) {
+      const h = String(Math.floor(current / 60)).padStart(2, '0');
+      const m = String(current % 60).padStart(2, '0');
+      times.push(`${h}:${m}`);
+      current += intervalo;
+    }
+
+    // Create plantillas
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO plantillas_horario (actividad_id, dia_semana, hora, capacidad, activa)
+      VALUES (?, ?, ?, ?, 1)
+    `);
+
+    let created = 0;
+    const DAYS_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+    const transaction = db.transaction(() => {
+      for (const dia of dias) {
+        for (const hora of times) {
+          const result = insertStmt.run(actividad_id, dia, hora, capacidad);
+          if (result.changes > 0) created++;
+        }
+      }
+    });
+    transaction();
+
+    success(res, {
+      created,
+      interpretacion: {
+        dias: dias.map(d => DAYS_NAMES[d]),
+        hora_desde: horaDesde,
+        hora_hasta: horaHasta,
+        intervalo_min: intervalo,
+        capacidad,
+        horarios_por_dia: times.length,
+        total_plantillas: dias.length * times.length,
+      },
+      texto_original: texto,
+    }, null, 201);
+  } catch (err) {
+    console.error('Error parsing text plantilla:', err);
+    error(res, 'SERVER_ERROR', 'Error creating plantillas from text', 500);
+  }
+});
+
 // Get plantillas
 app.get('/api/v1/plantillas', requireAuth, requireRole('admin'), (req, res) => {
   try {
@@ -2001,6 +2341,120 @@ app.post('/api/v1/plantillas/generar', requireAuth, requireRole('admin'), (req, 
     error(res, 'SERVER_ERROR', 'Error generating slots', 500);
   }
 });
+
+// ══════════════════════════════════════
+// BLOQUEOS ENDPOINTS
+// ══════════════════════════════════════
+
+// List bloqueos (optionally filter by actividad_id or date range)
+app.get('/api/v1/bloqueos', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const db = getDb();
+    const { actividad_id, desde, hasta } = req.query;
+    let sql = 'SELECT b.*, a.nombre as actividad_nombre FROM bloqueos_fechas b LEFT JOIN actividades a ON a.id = b.actividad_id WHERE 1=1';
+    const params = [];
+    if (actividad_id) { sql += ' AND b.actividad_id = ?'; params.push(actividad_id); }
+    if (desde) { sql += ' AND b.fecha >= ?'; params.push(desde); }
+    if (hasta) { sql += ' AND b.fecha <= ?'; params.push(hasta); }
+    sql += ' ORDER BY b.fecha ASC';
+    const bloqueos = db.prepare(sql).all(...params);
+    success(res, bloqueos);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error listing bloqueos', 500);
+  }
+});
+
+// Create bloqueo (actividad_id null = global block)
+app.post('/api/v1/bloqueos', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const { actividad_id, fecha, motivo } = req.body;
+    if (!fecha) return error(res, 'VALIDATION_ERROR', 'fecha es requerida', 400);
+    const bloqueo = create('bloqueos_fechas', {
+      actividad_id: actividad_id || null,
+      fecha,
+      motivo: motivo || null,
+    });
+    success(res, bloqueo, null, 201);
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error creating bloqueo', 500);
+  }
+});
+
+// Delete bloqueo
+app.delete('/api/v1/bloqueos/:id', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const removed = remove('bloqueos_fechas', req.params.id);
+    if (!removed) return error(res, 'NOT_FOUND', 'Bloqueo not found', 404);
+    success(res, { deleted: true, id: req.params.id });
+  } catch (err) {
+    error(res, 'SERVER_ERROR', 'Error deleting bloqueo', 500);
+  }
+});
+
+// Auto-generate slots for a date range from active plantillas (called by calendar navigation)
+app.post('/api/v1/slots/auto-generate', requireAuth, requireRole('admin', 'vendedor'), (req, res) => {
+  try {
+    const { desde, hasta, actividad_id } = req.body;
+    if (!desde || !hasta) return error(res, 'VALIDATION_ERROR', 'desde y hasta son requeridos', 400);
+
+    const db = getDb();
+
+    // Get active plantillas
+    let plantillas;
+    if (actividad_id) {
+      plantillas = db.prepare('SELECT * FROM plantillas_horario WHERE activa = 1 AND actividad_id = ?').all(actividad_id);
+    } else {
+      plantillas = db.prepare('SELECT * FROM plantillas_horario WHERE activa = 1').all();
+    }
+
+    if (plantillas.length === 0) {
+      return success(res, { created: 0, message: 'No hay plantillas activas' });
+    }
+
+    // Get bloqueos for the range
+    const bloqueos = db.prepare('SELECT actividad_id, fecha FROM bloqueos_fechas WHERE fecha >= ? AND fecha <= ?').all(desde, hasta);
+    const bloqueosSet = new Set(bloqueos.map(b => `${b.actividad_id || 'all'}-${b.fecha}`));
+
+    const insertStmt = db.prepare(`
+      INSERT OR IGNORE INTO horarios_slots (actividad_id, fecha, hora, capacidad, reservados, bloqueado)
+      VALUES (?, ?, ?, ?, 0, 0)
+    `);
+
+    let created = 0;
+    const startDate = new Date(desde + 'T12:00:00');
+    const endDate = new Date(hasta + 'T12:00:00');
+
+    const transaction = db.transaction(() => {
+      const d = new Date(startDate);
+      while (d <= endDate) {
+        const dayOfWeek = d.getDay();
+        const dateStr = d.toISOString().split('T')[0];
+
+        for (const p of plantillas) {
+          // Check vigencia
+          if (p.fecha_inicio && dateStr < p.fecha_inicio) continue;
+          if (p.fecha_fin && dateStr > p.fecha_fin) continue;
+
+          if (p.dia_semana === dayOfWeek) {
+            // Check bloqueos (specific + global)
+            if (bloqueosSet.has(`${p.actividad_id}-${dateStr}`) || bloqueosSet.has(`all-${dateStr}`)) continue;
+
+            const result = insertStmt.run(p.actividad_id, dateStr, p.hora, p.capacidad);
+            if (result.changes > 0) created++;
+          }
+        }
+        d.setDate(d.getDate() + 1);
+      }
+    });
+
+    transaction();
+    success(res, { created, desde, hasta });
+  } catch (err) {
+    console.error('Error auto-generating slots:', err);
+    error(res, 'SERVER_ERROR', 'Error generating slots', 500);
+  }
+});
+
 // ══════════════════════════════════════
 // CxC (CUENTAS POR COBRAR)
 // ══════════════════════════════════════

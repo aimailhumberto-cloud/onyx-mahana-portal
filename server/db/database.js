@@ -105,9 +105,32 @@ function getDb() {
     // Product image support
     addCol('actividades', 'imagen_url', 'TEXT');
 
+    // Booking system: slug, multi-site, web visibility, duration in minutes
+    addCol('actividades', 'slug', 'TEXT');
+    addCol('actividades', 'sitios', "TEXT DEFAULT '[]'"); // JSON array, e.g. ["mahanatours","ans-surf"]
+    addCol('actividades', 'visible_web', 'INTEGER DEFAULT 0');
+    addCol('actividades', 'duracion_min', 'INTEGER'); // duration in minutes for slot calculation
+
     // Timestamps for actividades (update() always sets updated_at)
     addCol('actividades', 'created_at', "TEXT DEFAULT (datetime('now'))");
     addCol('actividades', 'updated_at', "TEXT DEFAULT (datetime('now'))");
+
+    // Auto-generate slugs for existing actividades that don't have one
+    try {
+      const noSlug = db.prepare("SELECT id, nombre FROM actividades WHERE slug IS NULL OR slug = ''").all();
+      if (noSlug.length > 0) {
+        const updateSlug = db.prepare('UPDATE actividades SET slug = ? WHERE id = ?');
+        for (const a of noSlug) {
+          const slug = a.nombre.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          updateSlug.run(slug, a.id);
+        }
+        console.log(`✅ Generated slugs for ${noSlug.length} actividades`);
+      }
+    } catch (err) {
+      console.error('⚠️ Slug generation failed (non-fatal):', err.message);
+    }
 
     // Rename old categories to new names
     const renameCat = (oldName, newName) => {
@@ -191,6 +214,66 @@ function getDb() {
 
     // User seeding is now handled at server startup in server.js
 
+    // ── Plantillas vigencia (fecha_inicio, fecha_fin) ──
+    addCol('plantillas_horario', 'fecha_inicio', 'TEXT'); // null = desde siempre
+    addCol('plantillas_horario', 'fecha_fin', 'TEXT');     // null = para siempre
+
+    // ── Bloqueos de fechas (por producto o globales) ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS bloqueos_fechas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actividad_id INTEGER,
+        fecha TEXT NOT NULL,
+        motivo TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (actividad_id) REFERENCES actividades(id)
+      );
+    `);
+
+    // ── Booking config (global settings) ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS reservas_config (
+        clave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL DEFAULT '',
+        descripcion TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Seed booking config defaults
+    const bookingConfigCount = db.prepare('SELECT COUNT(*) as c FROM reservas_config').get();
+    if (bookingConfigCount.c === 0) {
+      const insertBooking = db.prepare('INSERT INTO reservas_config (clave, valor, descripcion) VALUES (?, ?, ?)');
+      insertBooking.run('anticipacion_min_horas', '24', 'Horas mínimas de anticipación para reservar');
+      insertBooking.run('anticipacion_max_dias', '60', 'Días máximos hacia el futuro para reservar');
+      insertBooking.run('buffer_entre_slots_min', '0', 'Minutos de buffer entre slots');
+      insertBooking.run('auto_generar_dias', '60', 'Días hacia el futuro para auto-generar slots');
+      insertBooking.run('politica_cancelacion', 'Las cancelaciones deben realizarse con al menos 24 horas de anticipación.', 'Política de cancelación pública');
+      console.log('✅ Booking config seeded');
+    }
+
+    // ── Payment config (PayPal, etc.) ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS configuracion_pagos (
+        clave TEXT PRIMARY KEY,
+        valor TEXT NOT NULL DEFAULT '',
+        descripcion TEXT,
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+
+    // Seed payment config defaults
+    const payConfigCount = db.prepare('SELECT COUNT(*) as c FROM configuracion_pagos').get();
+    if (payConfigCount.c === 0) {
+      const insertPay = db.prepare('INSERT INTO configuracion_pagos (clave, valor, descripcion) VALUES (?, ?, ?)');
+      insertPay.run('paypal_client_id', '', 'PayPal Client ID (global)');
+      insertPay.run('paypal_secret', '', 'PayPal Secret (global)');
+      insertPay.run('paypal_mode', 'sandbox', 'sandbox o live');
+      insertPay.run('paypal_enabled', 'false', 'Habilitar pagos con PayPal');
+      insertPay.run('moneda', 'USD', 'Moneda para pagos (USD, PAB)');
+      console.log('✅ Payment config seeded');
+    }
+
     // ── Notification config table ──
     db.exec(`
       CREATE TABLE IF NOT EXISTS configuracion_notificaciones (
@@ -232,7 +315,7 @@ function getDb() {
 
 // ── Table whitelist (prevents SQL injection via table names) ──
 
-const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones'];
+const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones', 'bloqueos_fechas', 'reservas_config', 'configuracion_pagos'];
 
 function validateTable(table) {
   if (!VALID_TABLES.includes(table)) {
