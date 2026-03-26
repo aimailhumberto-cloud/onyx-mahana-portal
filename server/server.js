@@ -33,10 +33,11 @@ const upload = multer({
 
 const app = express();
 const PORT = process.env.PORT || 3101;
-const API_KEY = process.env.API_KEY || 'mahana-dev-key-2026';
+const API_KEY = process.env.API_KEY || (process.env.NODE_ENV === 'production' ? '' : 'mahana-dev-key-2026');
 
-if (process.env.NODE_ENV === 'production' && API_KEY === 'mahana-dev-key-2026') {
-  console.warn('⚠️  WARNING: Using default API_KEY in production. Set API_KEY env var.');
+if (process.env.NODE_ENV === 'production' && !API_KEY) {
+  console.error('❌ FATAL: API_KEY env var is required in production');
+  process.exit(1);
 }
 
 // ── Middleware ──
@@ -108,7 +109,7 @@ function error(res, code, message, status = 400, fields) {
 
 function sanitize(str) {
   if (typeof str !== 'string') return '';
-  return str.replace(/[<>]/g, '');
+  return str.replace(/[<>"'`;]/g, '').replace(/\\+/g, '').trim();
 }
 
 // CxC auto-calculation: subtotal = precio - comision, itbm = 7%, total = subtotal + itbm
@@ -243,6 +244,16 @@ app.get('/api/v1/tours/:id', requireAuth, (req, res) => {
   try {
     const tour = findById('reservas_tours', req.params.id);
     if (!tour) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
+
+    // Partner scope: can only view own tours + strip financial fields
+    if (isPartner(req)) {
+      if (tour.vendedor !== req.user.vendedor) {
+        return error(res, 'FORBIDDEN', 'No tienes acceso a este tour', 403);
+      }
+      const { precio_ingreso, ganancia_mahana, ...safe } = tour;
+      return success(res, safe);
+    }
+
     success(res, tour);
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error fetching tour', 500);
@@ -1535,7 +1546,7 @@ app.put('/api/v1/actividades/:id', requireAuth, requireRole('admin'), (req, res)
     if (err.message?.includes('UNIQUE')) {
       return error(res, 'DUPLICATE', 'Ya existe una actividad con ese nombre', 409);
     }
-    error(res, 'SERVER_ERROR', 'Error updating actividad: ' + err.message, 500);
+    error(res, 'SERVER_ERROR', 'Error updating actividad', 500);
   }
 });
 
@@ -1659,7 +1670,7 @@ function toCsvRow(fields) {
   return fields.map(escapeCsvField).join(',');
 }
 
-app.get('/api/v1/tours/export', (req, res) => {
+app.get('/api/v1/tours/export', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const db = getDb();
     const { fecha_desde, fecha_hasta, estatus, actividad } = req.query;
@@ -1687,7 +1698,7 @@ app.get('/api/v1/tours/export', (req, res) => {
   }
 });
 
-app.get('/api/v1/estadias/export', (req, res) => {
+app.get('/api/v1/estadias/export', requireAuth, requireRole('admin'), (req, res) => {
   try {
     const db = getDb();
     const { check_in_desde, check_in_hasta, estado, propiedad } = req.query;
@@ -1719,7 +1730,7 @@ app.get('/api/v1/estadias/export', (req, res) => {
 // CALENDAR ENDPOINT
 // ══════════════════════════════════════
 
-app.get('/api/v1/calendar', (req, res) => {
+app.get('/api/v1/calendar', requireAuth, (req, res) => {
   try {
     const db = getDb();
     const { mes } = req.query; // e.g. "2026-03"
@@ -3019,11 +3030,12 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
         pax: personas,
         notas: `[Web Directa] Código: ${codigo}. ${notas || ''}`,
         fuente: 'web-directo',
-        estatus: 'Pagado',
+        estatus: 'Reservado',
         precio_ingreso: precioTotal,
         vendedor: 'Web Directa',
         solicitado_por: 'Cliente Web',
         gestionado_por: 'Sistema',
+        booking_codigo: codigo,
       });
     } catch (tourErr) {
       console.error('Error creating admin tour record:', tourErr.message);
@@ -3191,6 +3203,11 @@ app.post('/api/v1/public/paypal/capture-order', publicRateLimit(10), async (req,
     const { orderID, codigo } = req.body;
     if (!orderID || !codigo) return error(res1, 'VALIDATION_ERROR', 'orderID y codigo requeridos', 400);
     
+    // Validate orderID format (prevent path traversal)
+    if (!/^[A-Z0-9-]{10,50}$/i.test(orderID)) {
+      return error(res1, 'VALIDATION_ERROR', 'Formato de orderID inválido', 400);
+    }
+    
     const db = getDb();
     const booking = db.prepare('SELECT * FROM reservas_booking WHERE codigo = ?').get(codigo);
     if (!booking) return error(res1, 'NOT_FOUND', 'Reserva no encontrada', 404);
@@ -3199,7 +3216,7 @@ app.post('/api/v1/public/paypal/capture-order', publicRateLimit(10), async (req,
     }
     
     const accessToken = await getPayPalAccessToken();
-    const captureRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${orderID}/capture`, {
+    const captureRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -3220,11 +3237,11 @@ app.post('/api/v1/public/paypal/capture-order', publicRateLimit(10), async (req,
         WHERE codigo = ?
       `).run(orderID, payerId, codigo);
       
-      // Also update the reservas_tours record
+      // Also update the reservas_tours record (by booking_codigo, not LIKE)
       db.prepare(`
         UPDATE reservas_tours SET estatus = 'Pagado' 
-        WHERE notas LIKE ? AND (fuente = 'web-directo' OR fuente = 'web-agente')
-      `).run(`%${codigo}%`);
+        WHERE booking_codigo = ?
+      `).run(codigo);
       
       // Send notification
       notifications.onBookingPaid({
@@ -3325,12 +3342,16 @@ app.post('/api/v1/partner/paypal/create-order', requireAuth, async (req, res1) =
       edades: tourData.edades || '',
     });
 
-    // If slot_id provided, update slot reservados
+    // If slot_id provided, validate capacity and update slot reservados
     if (tourData.slot_id) {
-      try {
-        db.prepare('UPDATE horarios_slots SET reservados = reservados + ? WHERE id = ?').run(pax, tourData.slot_id);
-      } catch (slotErr) {
-        console.error('Error updating slot:', slotErr.message);
+      const slot = db.prepare('SELECT * FROM horarios_slots WHERE id = ? AND bloqueado = 0').get(tourData.slot_id);
+      if (slot) {
+        if (slot.reservados + pax > slot.capacidad) {
+          // Rollback tour creation
+          try { db.prepare('DELETE FROM reservas_tours WHERE id = ?').run(tourRecord.id); } catch {}
+          return error(res1, 'SLOT_FULL', `Solo quedan ${slot.capacidad - slot.reservados} cupos`, 400);
+        }
+        db.prepare('UPDATE horarios_slots SET reservados = reservados + ? WHERE id = ?').run(pax, slot.id);
       }
     }
 
@@ -3388,6 +3409,11 @@ app.post('/api/v1/partner/paypal/capture-order', requireAuth, async (req, res1) 
     const { orderID, tourId } = req.body;
     if (!orderID || !tourId) return error(res1, 'VALIDATION_ERROR', 'orderID y tourId requeridos', 400);
 
+    // Validate orderID format (must be alphanumeric + dashes, max 50 chars)
+    if (!/^[A-Z0-9-]{10,50}$/i.test(orderID)) {
+      return error(res1, 'VALIDATION_ERROR', 'Formato de orderID inválido', 400);
+    }
+
     const db = getDb();
     const tour = findById('reservas_tours', tourId);
     if (!tour) return error(res1, 'NOT_FOUND', 'Tour no encontrado', 404);
@@ -3398,7 +3424,7 @@ app.post('/api/v1/partner/paypal/capture-order', requireAuth, async (req, res1) 
     }
 
     const accessToken = await getPayPalAccessToken();
-    const captureRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${orderID}/capture`, {
+    const captureRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${encodeURIComponent(orderID)}/capture`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -3488,14 +3514,19 @@ app.listen(PORT, async () => {
   console.log(`🚀 Mahana Portal v2 running on port ${PORT}`);
   console.log(`📡 API: http://localhost:${PORT}/api/v1/api-status`);
 
-  // Seed users only if table is empty
+  // Seed users only if table is empty — passwords read from env vars
   try {
     const db = getDb();
     const count = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
     if (count.c === 0) {
       const bcrypt = require('bcryptjs');
-      const h1 = bcrypt.hashSync('mahana2026', 10);
-      const h2 = bcrypt.hashSync('caracol2026', 10);
+      const adminPass = process.env.SEED_ADMIN_PASSWORD || 'change-me-immediately';
+      const partnerPass = process.env.SEED_PARTNER_PASSWORD || 'change-me-immediately';
+      if (process.env.NODE_ENV === 'production' && (!process.env.SEED_ADMIN_PASSWORD || !process.env.SEED_PARTNER_PASSWORD)) {
+        console.warn('⚠️  WARNING: Using default seed passwords. Set SEED_ADMIN_PASSWORD and SEED_PARTNER_PASSWORD env vars.');
+      }
+      const h1 = bcrypt.hashSync(adminPass, 10);
+      const h2 = bcrypt.hashSync(partnerPass, 10);
       db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('admin@mahana.com', h1, 'Mahana Admin', 'admin', null);
       db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('caracol@playacaracol.com', h2, 'Playa Caracol', 'partner', 'Playa Caracol');
       console.log('✅ Users seeded at startup: 2 users');

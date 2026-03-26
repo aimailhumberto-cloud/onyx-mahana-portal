@@ -55,6 +55,13 @@ function getDb() {
     addCol('reservas_tours', 'cxc_fecha_vencimiento', 'TEXT');
     addCol('reservas_tours', 'cxc_fecha_pago', 'TEXT');
 
+    // Booking link field (replaces LIKE match on notas)
+    addCol('reservas_tours', 'booking_codigo', 'TEXT');
+    // PayPal fields
+    addCol('reservas_tours', 'paypal_order_id', 'TEXT');
+    addCol('reservas_tours', 'paypal_payer_id', 'TEXT');
+    addCol('reservas_tours', 'paypal_payer_email', 'TEXT');
+
     // Backfill CxC for existing tours that have pricing but no CxC calculated
     try {
       const toursToBackfill = db.prepare(`
@@ -133,11 +140,11 @@ function getDb() {
       console.error('⚠️ Slug generation failed (non-fatal):', err.message);
     }
 
-    // Auto-enable visible_web for active products that have it unset (migration for Render)
+    // Auto-enable visible_web for products where it's NULL (first-time migration only)
     try {
-      const updated = db.prepare("UPDATE actividades SET visible_web = 1 WHERE activa = 1 AND (visible_web IS NULL OR visible_web = 0)").run();
+      const updated = db.prepare("UPDATE actividades SET visible_web = 1 WHERE activa = 1 AND visible_web IS NULL").run();
       if (updated.changes > 0) {
-        console.log(`✅ Auto-enabled visible_web for ${updated.changes} active products`);
+        console.log(`✅ Auto-enabled visible_web for ${updated.changes} active products (first migration)`);
       }
     } catch (err) {
       console.error('⚠️ visible_web migration failed (non-fatal):', err.message);
