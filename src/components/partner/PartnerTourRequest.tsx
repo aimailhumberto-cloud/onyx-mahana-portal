@@ -817,15 +817,23 @@ export default function PartnerTourRequest() {
             <div className="space-y-4">
               {/* Price summary */}
               <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-yellow-800 font-medium">Total a pagar:</span>
-                  <span className="text-2xl font-bold text-yellow-800">
-                    ${((selectedAct?.precio_base || 0) * (parseInt(form.pax) || 1)).toFixed(2)} USD
-                  </span>
-                </div>
-                <p className="text-[11px] text-yellow-600 mt-1">
+                <p className="text-[11px] text-yellow-600 mb-2">
                   {selectedAct?.nombre} × {form.pax || 1} persona{(parseInt(form.pax) || 1) !== 1 ? 's' : ''}
                 </p>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between text-yellow-700">
+                    <span>Subtotal:</span>
+                    <span>${((selectedAct?.precio_base || 0) * (parseInt(form.pax) || 1)).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-yellow-700">
+                    <span>ITBM (7%):</span>
+                    <span>${(((selectedAct?.precio_base || 0) * (parseInt(form.pax) || 1)) * 0.07).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-yellow-900 text-lg pt-1 border-t border-yellow-200">
+                    <span>Total:</span>
+                    <span>${(((selectedAct?.precio_base || 0) * (parseInt(form.pax) || 1)) * 1.07).toFixed(2)} USD</span>
+                  </div>
+                </div>
               </div>
 
               {!isFormValidForPayPal() ? (

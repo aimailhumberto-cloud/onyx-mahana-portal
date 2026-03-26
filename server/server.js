@@ -3008,7 +3008,9 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
     
     // Create booking atomically
     const codigo = `BK-${Date.now().toString(36).toUpperCase()}`;
-    const precioTotal = (producto.precio_base || 0) * personas;
+    const precioNeto = (producto.precio_base || 0) * personas;
+    const itbm = Math.round(precioNeto * 0.07 * 100) / 100;
+    const precioTotal = Math.round((precioNeto + itbm) * 100) / 100;
     
     const transaction = db.transaction(() => {
       // Update slot reservados
@@ -3329,7 +3331,9 @@ app.post('/api/v1/partner/paypal/create-order', requireAuth, async (req, res1) =
 
     const pax = parseInt(tourData.pax) || 1;
     const precioBase = actividad.precio_base || 0;
-    const precioTotal = precioBase * pax;
+    const precioNeto = precioBase * pax;
+    const itbm = Math.round(precioNeto * 0.07 * 100) / 100;
+    const precioTotal = Math.round((precioNeto + itbm) * 100) / 100;
 
     if (precioTotal <= 0) {
       return error(res1, 'VALIDATION_ERROR', 'El precio del tour debe ser mayor a 0 para pagar con PayPal', 400);
@@ -3388,6 +3392,10 @@ app.post('/api/v1/partner/paypal/create-order', requireAuth, async (req, res1) =
           amount: {
             currency_code: 'USD',
             value: precioTotal.toFixed(2),
+            breakdown: {
+              item_total: { currency_code: 'USD', value: precioNeto.toFixed(2) },
+              tax_total: { currency_code: 'USD', value: itbm.toFixed(2) },
+            },
           },
         }],
         application_context: {
