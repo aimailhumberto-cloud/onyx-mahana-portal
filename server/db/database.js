@@ -61,6 +61,8 @@ function getDb() {
     addCol('reservas_tours', 'paypal_order_id', 'TEXT');
     addCol('reservas_tours', 'paypal_payer_id', 'TEXT');
     addCol('reservas_tours', 'paypal_payer_email', 'TEXT');
+    // Slot reference for capacity release on cancel
+    addCol('reservas_tours', 'slot_id', 'INTEGER');
 
     // Backfill CxC for existing tours that have pricing but no CxC calculated
     try {
@@ -148,6 +150,13 @@ function getDb() {
       }
     } catch (err) {
       console.error('⚠️ visible_web migration failed (non-fatal):', err.message);
+    }
+
+    // Ensure slug uniqueness
+    try {
+      db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_actividades_slug ON actividades(slug) WHERE slug IS NOT NULL AND slug != ""').run();
+    } catch (slugErr) {
+      console.error('⚠️ Slug unique index failed (non-fatal):', slugErr.message);
     }
 
     // Rename old categories to new names

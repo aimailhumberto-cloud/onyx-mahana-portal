@@ -353,6 +353,7 @@ app.post('/api/v1/tours', requireAuth, (req, res) => {
         return error(res, 'SLOT_FULL', `Solo quedan ${slot.capacidad - slot.reservados} cupos`, 400);
       }
       db.prepare('UPDATE horarios_slots SET reservados = reservados + ? WHERE id = ?').run(pax, slot.id);
+      data.slot_id = slot.id; // persist slot reference for later release
     }
 
     const tour = create('reservas_tours', data);
@@ -448,6 +449,21 @@ app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin', 'vendedo
     if (!existing) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
 
     const updated = update('reservas_tours', req.params.id, { estatus });
+
+    // Release slot capacity on Cancelado or Rechazado
+    if (['Cancelado', 'Rechazado'].includes(estatus) && !['Cancelado', 'Rechazado'].includes(existing.estatus)) {
+      if (existing.slot_id) {
+        try {
+          const db = getDb();
+          const pax = existing.pax || 1;
+          db.prepare('UPDATE horarios_slots SET reservados = MAX(reservados - ?, 0) WHERE id = ?').run(pax, existing.slot_id);
+          console.log(`♻️ Released ${pax} slot(s) from slot #${existing.slot_id} for cancelled tour #${existing.id}`);
+        } catch (slotErr) {
+          console.error('Error releasing slot:', slotErr.message);
+        }
+      }
+    }
+
     success(res, updated);
 
     // Notify status change

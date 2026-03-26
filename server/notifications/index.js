@@ -337,6 +337,26 @@ async function onBookingCreated(booking) {
   const results = {};
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   
+  // Email confirmation to client
+  if (booking.email && (isEnabled('email') || process.env.SMTP_PASS)) {
+    try {
+      const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+      results.email = await email.sendConfirmacion({
+        cliente: booking.nombre,
+        actividad: booking.producto,
+        fecha: booking.fecha,
+        hora: booking.hora,
+        pax: booking.personas,
+        precio_ingreso: booking.precio_total,
+        email: booking.email,
+        punto_encuentro: 'Se confirmará',
+      }, cc || undefined);
+    } catch (err) {
+      console.error('🔔 Notification error (email/booking):', err.message);
+      results.email = { success: false, error: err.message };
+    }
+  }
+
   if (tgChatId) {
     try {
       results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatNewBooking(booking));
