@@ -3047,7 +3047,7 @@ app.post('/api/v1/public/reservar', publicRateLimit(5, 60000), (req, res) => {
         pax: personas,
         notas: `[Web Directa] Código: ${codigo}. ${notas || ''}`,
         fuente: 'web-directo',
-        estatus: 'Reservado',
+        estatus: 'Por Aprobar',
         precio_ingreso: precioTotal,
         vendedor: 'Web Directa',
         solicitado_por: 'Cliente Web',

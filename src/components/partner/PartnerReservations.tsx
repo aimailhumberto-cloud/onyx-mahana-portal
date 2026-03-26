@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { getTours, getTourById, updatePartnerTour, uploadFile } from '../../api/api'
 import type { Tour } from '../../api/api'
-import { Loader2, Search, Calendar, Filter, ChevronDown, ChevronUp, Edit3, Save, X, AlertTriangle, Upload, Trash2 } from 'lucide-react'
+import { Loader2, Search, Calendar, Filter, ChevronDown, ChevronUp, Edit3, Save, X, AlertTriangle, Upload, Trash2, TrendingUp, DollarSign, Clock as ClockIcon, CheckCircle } from 'lucide-react'
 
 const STATUS_COLORS: Record<string, string> = {
   'Por Aprobar': 'bg-orange-100 text-orange-800 border-orange-200',
@@ -65,6 +65,33 @@ export default function PartnerReservations() {
     }
     setLoading(false)
   }
+
+  // ── Dashboard Stats ──
+  const stats = useMemo(() => {
+    const porAprobar = tours.filter(t => t.estatus === 'Por Aprobar').length
+    const aprobadas = tours.filter(t => ['Aprobado', 'Reservado'].includes(t.estatus)).length
+    const pagadas = tours.filter(t => t.estatus === 'Pagado').length
+    const rechazadas = tours.filter(t => t.estatus === 'Rechazado').length
+    const canceladas = tours.filter(t => t.estatus === 'Cancelado').length
+
+    const activos = tours.filter(t => !['Cancelado', 'Rechazado', 'Cerrado'].includes(t.estatus))
+    const totalPax = activos.reduce((sum, t) => sum + (t.pax || 1), 0)
+
+    // Financial - from tours that have pricing
+    const pagadasConPrecio = tours.filter(t => t.estatus === 'Pagado' && t.precio_ingreso)
+    const totalCobrado = pagadasConPrecio.reduce((sum, t) => sum + (t.precio_ingreso || 0), 0)
+    const comisionEstimada = pagadasConPrecio.reduce((sum, t) => {
+      const com = t.comision_pct || 20
+      return sum + ((t.precio_ingreso || 0) * com / 100)
+    }, 0)
+
+    // This month
+    const thisMonth = new Date().toISOString().slice(0, 7) // "2026-03"
+    const esteMes = tours.filter(t => t.fecha?.startsWith(thisMonth))
+    const esteMesActivas = esteMes.filter(t => !['Cancelado', 'Rechazado'].includes(t.estatus)).length
+
+    return { porAprobar, aprobadas, pagadas, rechazadas, canceladas, totalPax, totalCobrado, comisionEstimada, esteMesActivas }
+  }, [tours])
 
   const handleExpandToggle = async (tourId: number) => {
     if (expandedId === tourId) {
@@ -159,6 +186,80 @@ export default function PartnerReservations() {
           <p className="text-sm text-gray-500">{total} reservas en total</p>
         </div>
       </div>
+
+      {/* ── Mini Dashboard ── */}
+      {!loading && tours.length > 0 && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><ClockIcon className="w-4 h-4 text-orange-600" /></div>
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Pendientes</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{stats.porAprobar}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><CheckCircle className="w-4 h-4 text-blue-600" /></div>
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Aprobadas</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{stats.aprobadas}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><DollarSign className="w-4 h-4 text-green-600" /></div>
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Pagadas</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{stats.pagadas}</p>
+            </div>
+            <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center"><TrendingUp className="w-4 h-4 text-purple-600" /></div>
+                <span className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">Este Mes</span>
+              </div>
+              <p className="text-2xl font-bold text-gray-900">{stats.esteMesActivas}</p>
+            </div>
+          </div>
+
+          {stats.totalCobrado > 0 && (
+            <div className="bg-gradient-to-r from-emerald-50 to-blue-50 rounded-xl border border-emerald-200 p-4">
+              <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold mb-3">💰 Resumen Financiero</p>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500">Total cobrado</p>
+                  <p className="text-xl font-bold text-gray-900">${stats.totalCobrado.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Tu comisión</p>
+                  <p className="text-xl font-bold text-emerald-700">${stats.comisionEstimada.toFixed(0)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Personas</p>
+                  <p className="text-xl font-bold text-blue-700">{stats.totalPax}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {total > 0 && (
+            <div className="bg-white rounded-xl border border-gray-100 p-3 shadow-sm">
+              <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">Distribución</p>
+              <div className="flex rounded-full overflow-hidden h-2.5 bg-gray-100">
+                {stats.pagadas > 0 && <div className="bg-green-500" style={{ width: `${(stats.pagadas / total) * 100}%` }} />}
+                {stats.aprobadas > 0 && <div className="bg-blue-500" style={{ width: `${(stats.aprobadas / total) * 100}%` }} />}
+                {stats.porAprobar > 0 && <div className="bg-orange-400" style={{ width: `${(stats.porAprobar / total) * 100}%` }} />}
+                {stats.rechazadas > 0 && <div className="bg-red-400" style={{ width: `${(stats.rechazadas / total) * 100}%` }} />}
+              </div>
+              <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-gray-500">
+                {stats.pagadas > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Pagadas {stats.pagadas}</span>}
+                {stats.aprobadas > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Aprobadas {stats.aprobadas}</span>}
+                {stats.porAprobar > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400" /> Pendientes {stats.porAprobar}</span>}
+                {stats.rechazadas > 0 && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Rechazadas {stats.rechazadas}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">

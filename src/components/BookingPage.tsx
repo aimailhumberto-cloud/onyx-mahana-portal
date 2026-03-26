@@ -224,9 +224,20 @@ export default function BookingPage() {
   // Submit booking
   const handleSubmit = async () => {
     if (!producto || !slug) return
-    if (!form.nombre.trim() || !form.email.trim() || form.personas < 1) {
-      setError('Por favor completa todos los campos requeridos')
-      return
+    if (!form.nombre.trim()) {
+      setError('El nombre completo es obligatorio'); return
+    }
+    if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      setError('Ingresa un email válido (ej: nombre@correo.com)'); return
+    }
+    if (!form.whatsapp.trim() || form.whatsapp.replace(/[^0-9]/g, '').length < 7) {
+      setError('Ingresa un teléfono válido (mínimo 7 dígitos)'); return
+    }
+    if (!form.notas.trim()) {
+      setError('Las notas son obligatorias (edades, restricciones, preguntas, etc.)'); return
+    }
+    if (form.personas < 1) {
+      setError('Mínimo 1 persona'); return
     }
     setSubmitting(true)
     setError('')
@@ -599,9 +610,9 @@ export default function BookingPage() {
                     className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="tu@email.com" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp *</label>
                   <input type="tel" value={form.whatsapp} onChange={e => setForm({ ...form, whatsapp: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none" placeholder="+507 6XXX-XXXX" />
+                    className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none ${form.whatsapp.trim() && form.whatsapp.replace(/[^0-9]/g, '').length >= 7 ? 'border-gray-200' : 'border-red-300 bg-red-50/30'}`} placeholder="+507 6XXX-XXXX" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -620,14 +631,33 @@ export default function BookingPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notas *</label>
                 <textarea value={form.notas} onChange={e => setForm({ ...form, notas: e.target.value })} rows={2}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none resize-none" placeholder="Edades, restricciones, preguntas..." />
+                  className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-teal-500 focus:outline-none resize-none ${form.notas.trim() ? 'border-gray-200' : 'border-red-300 bg-red-50/30'}`} placeholder="Edades, restricciones, alergias, preguntas... (obligatorio)" />
               </div>
-              <button onClick={handleSubmit} disabled={submitting || !form.nombre || !form.email || form.personas < 1}
+
+              {/* Price with ITBM */}
+              {producto.precio_base && producto.precio_base > 0 && (
+                <div className="bg-gray-50 rounded-xl p-3 space-y-1 text-sm">
+                  <div className="flex justify-between text-gray-500">
+                    <span>Subtotal ({form.personas} pax)</span>
+                    <span>${(producto.precio_base * form.personas).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>ITBM (7%)</span>
+                    <span>${(producto.precio_base * form.personas * 0.07).toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-teal-800 text-base pt-1 border-t border-gray-200">
+                    <span>Total</span>
+                    <span>${(producto.precio_base * form.personas * 1.07).toFixed(2)} USD</span>
+                  </div>
+                </div>
+              )}
+
+              <button onClick={handleSubmit} disabled={submitting || !form.nombre.trim() || !form.email.trim() || !form.whatsapp.trim() || !form.notas.trim() || form.personas < 1}
                 className="w-full py-3 bg-teal-600 text-white rounded-xl font-semibold text-sm hover:bg-teal-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-teal-600/20">
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                Continuar al Pago — ${((producto.precio_base || 0) * form.personas).toFixed(2)}
+                Continuar al Pago — ${((producto.precio_base || 0) * form.personas * 1.07).toFixed(2)}
               </button>
             </div>
           </div>
