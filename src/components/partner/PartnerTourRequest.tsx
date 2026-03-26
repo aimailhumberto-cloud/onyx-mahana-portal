@@ -721,6 +721,70 @@ export default function PartnerTourRequest() {
             />
             <p className="text-xs text-gray-400 mt-1">⚠️ Incluir siempre: lugar de salida y detalles del tour</p>
           </div>
+          {/* ── Financial Breakdown ── */}
+          {selectedAct && (selectedAct.precio_base || 0) > 0 && (
+            <div className="border-t border-gray-100 pt-5">
+              <label className="block text-sm font-semibold text-gray-800 mb-3">💰 Resumen Financiero</label>
+              {(() => {
+                const precioBase = selectedAct.precio_base || 0
+                const pax = parseInt(form.pax) || 1
+                const comPct = selectedAct.comision_caracol_pct || 20
+                const subtotal = precioBase * pax
+                const itbmCliente = Math.round(subtotal * 0.07 * 100) / 100
+                const totalCliente = Math.round((subtotal + itbmCliente) * 100) / 100
+                const comisionPartner = Math.round(subtotal * comPct / 100 * 100) / 100
+                const baseMahana = Math.round((subtotal - comisionPartner) * 100) / 100
+                const itbmMahana = Math.round(baseMahana * 0.07 * 100) / 100
+                const totalMahana = Math.round((baseMahana + itbmMahana) * 100) / 100
+                return (
+                  <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-xl border border-slate-200 overflow-hidden">
+                    {/* Client pays */}
+                    <div className="p-4 space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold">El cliente paga</p>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>{selectedAct.nombre} × {pax} pax</span>
+                        <span>${subtotal.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>ITBM (7%)</span>
+                        <span>${itbmCliente.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-gray-900 text-base pt-1 border-t border-slate-200">
+                        <span>Total cliente</span>
+                        <span className="text-emerald-700">${totalCliente.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Partner commission */}
+                    <div className="px-4 py-3 bg-emerald-50 border-y border-emerald-200 space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold">Tu comisión ({comPct}%)</p>
+                      <div className="flex justify-between font-bold text-emerald-700 text-base">
+                        <span>Retienes</span>
+                        <span>${comisionPartner.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Mahana invoices */}
+                    <div className="p-4 space-y-1.5">
+                      <p className="text-[10px] uppercase tracking-wider text-blue-500 font-semibold">Mahana te factura (CxC)</p>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>Base ({selectedAct.nombre} - comisión)</span>
+                        <span>${baseMahana.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>ITBM (7%)</span>
+                        <span>${itbmMahana.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-blue-800 text-base pt-1 border-t border-slate-200">
+                        <span>Total a facturar</span>
+                        <span>${totalMahana.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
 
           {/* Payment Method Selector */}
           <div className="border-t border-gray-100 pt-5">
