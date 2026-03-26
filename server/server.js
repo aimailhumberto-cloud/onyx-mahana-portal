@@ -2753,17 +2753,22 @@ app.get('/api/v1/public/productos/:slug', publicRateLimit(60), (req, res) => {
     const modo_booking = producto.modo_booking || 'directo';
     
     // Get PayPal config (public - only expose client ID and enabled status)
-    const paypalEnabled = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_enabled'").get();
-    const paypalClientId = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_client_id'").get();
-    const paypalMode = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_mode'").get();
+    // Check DB first, then env vars as fallback
+    const paypalEnabledDB = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_enabled'").get();
+    const paypalClientIdDB = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_client_id'").get();
+    const paypalModeDB = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_mode'").get();
+    
+    const ppClientId = paypalClientIdDB?.valor || process.env.PAYPAL_CLIENT_ID || '';
+    const ppEnabled = (paypalEnabledDB?.valor === '1' || paypalEnabledDB?.valor === 'true') || !!process.env.PAYPAL_CLIENT_ID;
+    const ppMode = paypalModeDB?.valor || process.env.PAYPAL_MODE || 'sandbox';
     
     success(res, {
       ...producto,
       modo_booking,
       pago: {
-        paypal_enabled: paypalEnabled?.valor === '1' || paypalEnabled?.valor === 'true',
-        paypal_client_id: (paypalEnabled?.valor === '1' || paypalEnabled?.valor === 'true') ? paypalClientId?.valor : null,
-        paypal_mode: paypalMode?.valor || 'sandbox',
+        paypal_enabled: ppEnabled,
+        paypal_client_id: ppEnabled ? ppClientId : null,
+        paypal_mode: ppMode,
       }
     });
   } catch (err) {
@@ -3098,6 +3103,147 @@ app.post('/api/v1/public/pago/confirmar', publicRateLimit(10), (req, res) => {
     });
   } catch (err) {
     error(res, 'SERVER_ERROR', 'Error confirming payment', 500);
+  }
+});
+
+// ══════════════════════════════════════
+// PAYPAL ORDER API
+// ══════════════════════════════════════
+
+const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID || '';
+const PAYPAL_CLIENT_SECRET = process.env.PAYPAL_CLIENT_SECRET || '';
+const PAYPAL_MODE = process.env.PAYPAL_MODE || 'sandbox';
+const PAYPAL_API = PAYPAL_MODE === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
+
+async function getPayPalAccessToken() {
+  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
+  const res = await fetch(`${PAYPAL_API}/v1/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Authorization': `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'grant_type=client_credentials',
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Failed to get PayPal access token');
+  return data.access_token;
+}
+
+// Create PayPal order for a booking
+app.post('/api/v1/public/paypal/create-order', publicRateLimit(10), async (req, res1) => {
+  try {
+    const { codigo } = req.body;
+    if (!codigo) return error(res1, 'VALIDATION_ERROR', 'Código de reserva requerido', 400);
+    if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
+      return error(res1, 'CONFIG_ERROR', 'PayPal no está configurado', 500);
+    }
+    
+    const db = getDb();
+    const booking = db.prepare('SELECT * FROM reservas_booking WHERE codigo = ?').get(codigo);
+    if (!booking) return error(res1, 'NOT_FOUND', 'Reserva no encontrada', 404);
+    if (booking.estado !== 'pendiente_pago') {
+      return error(res1, 'INVALID_STATE', 'Esta reserva ya fue procesada', 400);
+    }
+    
+    const producto = db.prepare('SELECT nombre FROM actividades WHERE id = ?').get(booking.actividad_id);
+    const accessToken = await getPayPalAccessToken();
+    
+    const orderRes = await fetch(`${PAYPAL_API}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [{
+          reference_id: booking.codigo,
+          description: `${producto?.nombre || booking.slug} - ${booking.fecha} ${booking.hora} (${booking.personas} pax)`,
+          amount: {
+            currency_code: 'USD',
+            value: String(booking.precio_total.toFixed(2)),
+          },
+        }],
+        application_context: {
+          brand_name: 'Mahana Tours',
+          landing_page: 'NO_PREFERENCE',
+          user_action: 'PAY_NOW',
+        },
+      }),
+    });
+    
+    const orderData = await orderRes.json();
+    if (orderData.id) {
+      // Store PayPal order ID in booking
+      db.prepare('UPDATE reservas_booking SET paypal_order_id = ? WHERE codigo = ?').run(orderData.id, codigo);
+      success(res1, { orderID: orderData.id });
+    } else {
+      console.error('PayPal create order error:', orderData);
+      error(res1, 'PAYPAL_ERROR', orderData.message || 'Error creating PayPal order', 500);
+    }
+  } catch (err) {
+    console.error('PayPal create order error:', err);
+    error(res1, 'SERVER_ERROR', 'Error creating PayPal order', 500);
+  }
+});
+
+// Capture PayPal order (after buyer approves)
+app.post('/api/v1/public/paypal/capture-order', publicRateLimit(10), async (req, res1) => {
+  try {
+    const { orderID, codigo } = req.body;
+    if (!orderID || !codigo) return error(res1, 'VALIDATION_ERROR', 'orderID y codigo requeridos', 400);
+    
+    const db = getDb();
+    const booking = db.prepare('SELECT * FROM reservas_booking WHERE codigo = ?').get(codigo);
+    if (!booking) return error(res1, 'NOT_FOUND', 'Reserva no encontrada', 404);
+    if (booking.estado !== 'pendiente_pago') {
+      return error(res1, 'INVALID_STATE', 'Esta reserva ya fue procesada', 400);
+    }
+    
+    const accessToken = await getPayPalAccessToken();
+    const captureRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${orderID}/capture`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    const captureData = await captureRes.json();
+    
+    if (captureData.status === 'COMPLETED') {
+      const payerId = captureData.payer?.payer_id || '';
+      const payerEmail = captureData.payer?.email_address || '';
+      
+      // Update booking as paid
+      db.prepare(`
+        UPDATE reservas_booking 
+        SET estado = 'pagado', paypal_order_id = ?, paypal_payer_id = ?, paid_at = datetime('now')
+        WHERE codigo = ?
+      `).run(orderID, payerId, codigo);
+      
+      // Also update the reservas_tours record
+      db.prepare(`
+        UPDATE reservas_tours SET estatus = 'Pagado' 
+        WHERE notas LIKE ? AND (fuente = 'web-directo' OR fuente = 'web-agente')
+      `).run(`%${codigo}%`);
+      
+      // Send notification
+      notifications.onBookingPaid({
+        ...booking, paypal_order_id: orderID, payer_email: payerEmail,
+      }).catch(err => console.error('Booking paid notification error:', err.message));
+      
+      success(res1, {
+        codigo,
+        estado: 'pagado',
+        paypal_status: 'COMPLETED',
+        mensaje: '¡Pago confirmado! Tu reserva está lista.',
+      });
+    } else {
+      console.error('PayPal capture failed:', captureData);
+      error(res1, 'PAYPAL_ERROR', captureData.message || 'Payment not completed', 400);
+    }
+  } catch (err) {
+    console.error('PayPal capture error:', err);
+    error(res1, 'SERVER_ERROR', 'Error capturing payment', 500);
   }
 });
 

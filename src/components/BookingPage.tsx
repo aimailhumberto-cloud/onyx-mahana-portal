@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import {
   Calendar, Clock, User, CreditCard, CheckCircle, ChevronLeft, ChevronRight,
@@ -33,6 +33,103 @@ async function postPublic(path: string, body: any) {
     body: JSON.stringify(body)
   })
   return res.json()
+}
+
+// ── PayPal Smart Buttons Component ──
+function PayPalButtons({ clientId, mode, codigo, onSuccess, onError }: {
+  clientId: string; mode: string; codigo: string;
+  onSuccess: () => void; onError: (msg: string) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [loading, setLoading] = useState(true)
+  const [sdkReady, setSdkReady] = useState(false)
+
+  // Load PayPal SDK script
+  useEffect(() => {
+    if (document.getElementById('paypal-sdk')) {
+      setSdkReady(true)
+      setLoading(false)
+      return
+    }
+
+    const script = document.createElement('script')
+    script.id = 'paypal-sdk'
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture&enable-funding=card`
+    script.async = true
+    script.onload = () => { setSdkReady(true); setLoading(false) }
+    script.onerror = () => { onError('Error cargando PayPal SDK'); setLoading(false) }
+    document.body.appendChild(script)
+
+    return () => {
+      // Don't remove script on unmount (cached for re-renders)
+    }
+  }, [clientId])
+
+  // Render buttons once SDK is ready
+  useEffect(() => {
+    if (!sdkReady || !containerRef.current || !(window as any).paypal) return
+
+    containerRef.current.innerHTML = '' // Clear previous renders
+
+    ;(window as any).paypal.Buttons({
+      style: {
+        layout: 'vertical',
+        color: 'gold',
+        shape: 'rect',
+        label: 'paypal',
+        height: 45,
+      },
+      createOrder: async () => {
+        try {
+          const res = await postPublic('/paypal/create-order', { codigo })
+          if (res.success && res.data?.orderID) {
+            return res.data.orderID
+          }
+          throw new Error(res.error?.message || 'Error creando orden PayPal')
+        } catch (err: any) {
+          onError(err.message || 'Error al crear orden de pago')
+          throw err
+        }
+      },
+      onApprove: async (data: any) => {
+        try {
+          const res = await postPublic('/paypal/capture-order', {
+            orderID: data.orderID,
+            codigo,
+          })
+          if (res.success) {
+            onSuccess()
+          } else {
+            onError(res.error?.message || 'Error al capturar pago')
+          }
+        } catch (err: any) {
+          onError(err.message || 'Error procesando pago')
+        }
+      },
+      onError: (err: any) => {
+        console.error('PayPal error:', err)
+        onError('Error en el pago con PayPal')
+      },
+      onCancel: () => {
+        // User cancelled — no action needed
+      },
+    }).render(containerRef.current)
+  }, [sdkReady, codigo])
+
+  return (
+    <div className="space-y-3">
+      {loading && (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          <span className="ml-2 text-sm text-gray-500">Cargando métodos de pago...</span>
+        </div>
+      )}
+      <div ref={containerRef} className={loading ? 'hidden' : ''} />
+      <p className="text-[10px] text-center text-gray-400">
+        Pago seguro procesado por PayPal. Puedes pagar con tarjeta de crédito, débito o tu cuenta PayPal.
+      </p>
+    </div>
+  )
 }
 
 export default function BookingPage() {
@@ -557,16 +654,18 @@ export default function BookingPage() {
                 </div>
               </div>
 
-              {/* PayPal button placeholder */}
+              {/* PayPal Smart Buttons */}
               {producto.pago.paypal_enabled && producto.pago.paypal_client_id ? (
-                <div className="border-2 border-dashed border-yellow-300 rounded-xl p-6 text-center bg-yellow-50/50">
-                  <p className="text-sm font-medium text-yellow-700">PayPal Smart Buttons</p>
-                  <p className="text-xs text-yellow-600 mt-1">Se cargarán aquí cuando se configure PayPal Client ID</p>
-                  <button onClick={handleConfirmPayment} disabled={submitting}
-                    className="mt-3 px-6 py-2.5 bg-yellow-500 text-white rounded-xl font-medium text-sm hover:bg-yellow-600 disabled:opacity-50">
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin inline" /> : 'Simular Pago PayPal'}
-                  </button>
-                </div>
+                <PayPalButtons
+                  clientId={producto.pago.paypal_client_id}
+                  mode={producto.pago.paypal_mode}
+                  codigo={booking.codigo}
+                  onSuccess={() => {
+                    setBooking({ ...booking, estado: 'pagado' })
+                    setStep(5)
+                  }}
+                  onError={(msg) => setError(msg)}
+                />
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-600 text-center">Pago no configurado. Confirma tu reserva y un agente procesará el pago.</p>
