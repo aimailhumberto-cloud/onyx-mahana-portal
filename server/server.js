@@ -3248,6 +3248,211 @@ app.post('/api/v1/public/paypal/capture-order', publicRateLimit(10), async (req,
 });
 
 // ══════════════════════════════════════
+// PARTNER PAYPAL ENDPOINTS
+// ══════════════════════════════════════
+
+// Partner: Get PayPal config (reuses same global config)
+app.get('/api/v1/partner/paypal-config', requireAuth, (req, res) => {
+  try {
+    if (!isPartner(req)) return error(res, 'FORBIDDEN', 'Solo para partners', 403);
+    const db = getDb();
+
+    const paypalEnabledDB = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_enabled'").get();
+    const paypalClientIdDB = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_client_id'").get();
+    const paypalModeDB = db.prepare("SELECT valor FROM configuracion_pagos WHERE clave = 'paypal_mode'").get();
+
+    const ppClientId = paypalClientIdDB?.valor || process.env.PAYPAL_CLIENT_ID || '';
+    const ppEnabled = (paypalEnabledDB?.valor === '1' || paypalEnabledDB?.valor === 'true') || !!process.env.PAYPAL_CLIENT_ID;
+    const ppMode = paypalModeDB?.valor || process.env.PAYPAL_MODE || 'sandbox';
+
+    success(res, {
+      paypal_enabled: ppEnabled,
+      paypal_client_id: ppEnabled ? ppClientId : null,
+      paypal_mode: ppMode,
+    });
+  } catch (err) {
+    console.error('Error loading partner PayPal config:', err);
+    error(res, 'SERVER_ERROR', 'Error loading PayPal config', 500);
+  }
+});
+
+// Partner: Create tour + PayPal order in one step
+app.post('/api/v1/partner/paypal/create-order', requireAuth, async (req, res1) => {
+  try {
+    if (!isPartner(req)) return error(res1, 'FORBIDDEN', 'Solo para partners', 403);
+    if (!PAYPAL_CLIENT_ID || !PAYPAL_CLIENT_SECRET) {
+      return error(res1, 'CONFIG_ERROR', 'PayPal no está configurado', 500);
+    }
+
+    const { tourData } = req.body;
+    if (!tourData || !tourData.actividad) {
+      return error(res1, 'VALIDATION_ERROR', 'Datos del tour requeridos', 400);
+    }
+
+    const db = getDb();
+
+    // Get the actividad to compute price
+    const actividad = db.prepare('SELECT * FROM actividades WHERE nombre = ? AND activa = 1').get(tourData.actividad);
+    if (!actividad) return error(res1, 'NOT_FOUND', 'Actividad no encontrada', 404);
+
+    const pax = parseInt(tourData.pax) || 1;
+    const precioBase = actividad.precio_base || 0;
+    const precioTotal = precioBase * pax;
+
+    if (precioTotal <= 0) {
+      return error(res1, 'VALIDATION_ERROR', 'El precio del tour debe ser mayor a 0 para pagar con PayPal', 400);
+    }
+
+    // Create the tour record first
+    const tourRecord = create('reservas_tours', {
+      cliente: tourData.cliente,
+      whatsapp: tourData.whatsapp || '',
+      email_cliente: tourData.email_cliente || '',
+      actividad: tourData.actividad,
+      fecha: tourData.fecha || '',
+      hora: tourData.hora || '',
+      pax: pax,
+      notas: tourData.notas || '',
+      fuente: 'partner-paypal',
+      estatus: 'Por Aprobar',
+      vendedor: req.user.vendedor || req.user.nombre,
+      solicitado_por: tourData.solicitado_por || req.user.nombre,
+      gestionado_por: tourData.gestionado_por || req.user.nombre,
+      precio_ingreso: precioTotal,
+      hotel: tourData.hotel || '',
+      nacionalidad: tourData.nacionalidad || '',
+      idioma: tourData.idioma || '',
+      edades: tourData.edades || '',
+    });
+
+    // If slot_id provided, update slot reservados
+    if (tourData.slot_id) {
+      try {
+        db.prepare('UPDATE horarios_slots SET reservados = reservados + ? WHERE id = ?').run(pax, tourData.slot_id);
+      } catch (slotErr) {
+        console.error('Error updating slot:', slotErr.message);
+      }
+    }
+
+    // Create PayPal order
+    const accessToken = await getPayPalAccessToken();
+    const description = `${tourData.actividad} - ${tourData.fecha || 'TBD'} (${pax} pax) - ${tourData.cliente}`;
+
+    const orderRes = await fetch(`${PAYPAL_API}/v2/checkout/orders`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        intent: 'CAPTURE',
+        purchase_units: [{
+          reference_id: `TOUR-${tourRecord.id}`,
+          description: description.substring(0, 127),
+          amount: {
+            currency_code: 'USD',
+            value: precioTotal.toFixed(2),
+          },
+        }],
+        application_context: {
+          brand_name: 'Mahana Tours',
+          landing_page: 'NO_PREFERENCE',
+          user_action: 'PAY_NOW',
+        },
+      }),
+    });
+
+    const orderData = await orderRes.json();
+    if (orderData.id) {
+      // Store PayPal order ID in tour
+      update('reservas_tours', tourRecord.id, { paypal_order_id: orderData.id });
+
+      success(res1, { orderID: orderData.id, tourId: tourRecord.id, precioTotal });
+    } else {
+      // Rollback: delete the tour if PayPal order failed
+      console.error('PayPal create order error:', orderData);
+      try { db.prepare('DELETE FROM reservas_tours WHERE id = ?').run(tourRecord.id); } catch {}
+      error(res1, 'PAYPAL_ERROR', orderData.message || 'Error creating PayPal order', 500);
+    }
+  } catch (err) {
+    console.error('Partner PayPal create order error:', err);
+    error(res1, 'SERVER_ERROR', 'Error creating PayPal order', 500);
+  }
+});
+
+// Partner: Capture PayPal order and mark tour as paid
+app.post('/api/v1/partner/paypal/capture-order', requireAuth, async (req, res1) => {
+  try {
+    if (!isPartner(req)) return error(res1, 'FORBIDDEN', 'Solo para partners', 403);
+
+    const { orderID, tourId } = req.body;
+    if (!orderID || !tourId) return error(res1, 'VALIDATION_ERROR', 'orderID y tourId requeridos', 400);
+
+    const db = getDb();
+    const tour = findById('reservas_tours', tourId);
+    if (!tour) return error(res1, 'NOT_FOUND', 'Tour no encontrado', 404);
+
+    // Verify this tour belongs to the partner
+    if (tour.vendedor !== req.user.vendedor && tour.vendedor !== req.user.nombre) {
+      return error(res1, 'FORBIDDEN', 'Este tour no te pertenece', 403);
+    }
+
+    const accessToken = await getPayPalAccessToken();
+    const captureRes = await fetch(`${PAYPAL_API}/v2/checkout/orders/${orderID}/capture`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const captureData = await captureRes.json();
+
+    if (captureData.status === 'COMPLETED') {
+      const payerId = captureData.payer?.payer_id || '';
+      const payerEmail = captureData.payer?.email_address || '';
+      const now = new Date().toISOString().split('T')[0];
+
+      // Calculate CxC amounts
+      const cxcData = calcCxC(tour);
+
+      // Update tour: mark as Pagado, set PayPal info, mark CxC as Pagada
+      update('reservas_tours', tourId, {
+        estatus: 'Pagado',
+        paypal_order_id: orderID,
+        paypal_payer_id: payerId,
+        paypal_payer_email: payerEmail,
+        ...cxcData,
+        cxc_estatus: 'Pagada',
+        cxc_fecha_emision: now,
+        cxc_fecha_pago: now,
+        notas: `${tour.notas || ''}\n[PayPal] Pagado por partner. Order: ${orderID}. Email: ${payerEmail}`.trim(),
+      });
+
+      // Send notification
+      notifications.onTourCreated({
+        ...tour,
+        estatus: 'Pagado',
+        notas: `[PayPal Partner] Pagado directo. Order: ${orderID}`,
+      }).catch(err => console.error('Partner PayPal notification error:', err.message));
+
+      success(res1, {
+        tourId,
+        estado: 'Pagado',
+        paypal_status: 'COMPLETED',
+        mensaje: '¡Pago completado! El tour ha sido registrado y pagado.',
+      });
+    } else {
+      console.error('Partner PayPal capture failed:', captureData);
+      error(res1, 'PAYPAL_ERROR', captureData.message || 'Payment not completed', 400);
+    }
+  } catch (err) {
+    console.error('Partner PayPal capture error:', err);
+    error(res1, 'SERVER_ERROR', 'Error capturing payment', 500);
+  }
+});
+
+// ══════════════════════════════════════
 // STATIC FILES + SPA FALLBACK
 // ══════════════════════════════════════
 

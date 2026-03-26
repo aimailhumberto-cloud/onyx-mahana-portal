@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getActividades, createTour, uploadFile } from '../../api/api'
+import { getActividades, createTour, uploadFile, getPartnerPayPalConfig, partnerPayPalCreateOrder, partnerPayPalCaptureOrder } from '../../api/api'
 import type { Actividad } from '../../api/api'
-import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle, Search, ImageIcon, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, ArrowLeft, CheckCircle, AlertCircle, Users, Clock, MapPin, Upload, X, Image, UserCircle, Search, ImageIcon, Calendar, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 
 const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -16,6 +16,85 @@ async function fetchPublic(path: string) {
 
 interface DayAvail { estado: string; disponibles: number; total_slots: number }
 interface SlotAvail { id: number; hora: string; disponibles: number; capacidad: number }
+
+// ── PayPal Smart Buttons for Partner ──
+function PayPalPartnerButtons({ clientId, mode, tourData, onSuccess, onError }: {
+  clientId: string; mode: string; tourData: Record<string, any>;
+  onSuccess: (tourId: number) => void; onError: (msg: string) => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [loading, setLoading] = useState(true)
+  const [sdkReady, setSdkReady] = useState(false)
+  const tourIdRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (document.getElementById('paypal-sdk')) {
+      setSdkReady(true)
+      setLoading(false)
+      return
+    }
+    const script = document.createElement('script')
+    script.id = 'paypal-sdk'
+    script.src = `https://www.paypal.com/sdk/js?client-id=${clientId}&currency=USD&intent=capture&enable-funding=card`
+    script.async = true
+    script.onload = () => { setSdkReady(true); setLoading(false) }
+    script.onerror = () => { onError('Error cargando PayPal SDK'); setLoading(false) }
+    document.body.appendChild(script)
+  }, [clientId])
+
+  useEffect(() => {
+    if (!sdkReady || !containerRef.current || !(window as any).paypal) return
+    containerRef.current.innerHTML = ''
+    ;(window as any).paypal.Buttons({
+      style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal', height: 45 },
+      createOrder: async () => {
+        try {
+          const res = await partnerPayPalCreateOrder(tourData)
+          if (res.success && res.data?.orderID) {
+            tourIdRef.current = res.data.tourId
+            return res.data.orderID
+          }
+          throw new Error(res.error?.message || 'Error creando orden PayPal')
+        } catch (err: any) {
+          onError(err.message || 'Error al crear orden de pago')
+          throw err
+        }
+      },
+      onApprove: async (data: any) => {
+        try {
+          const res = await partnerPayPalCaptureOrder(data.orderID, tourIdRef.current)
+          if (res.success) {
+            onSuccess(tourIdRef.current)
+          } else {
+            onError(res.error?.message || 'Error al capturar pago')
+          }
+        } catch (err: any) {
+          onError(err.message || 'Error procesando pago')
+        }
+      },
+      onError: (err: any) => {
+        console.error('PayPal error:', err)
+        onError('Error en el pago con PayPal')
+      },
+      onCancel: () => {},
+    }).render(containerRef.current)
+  }, [sdkReady, JSON.stringify(tourData)])
+
+  return (
+    <div className="space-y-3">
+      {loading && (
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          <span className="ml-2 text-sm text-gray-500">Cargando métodos de pago...</span>
+        </div>
+      )}
+      <div ref={containerRef} className={loading ? 'hidden' : ''} />
+      <p className="text-[10px] text-center text-gray-400">
+        Pago seguro procesado por PayPal. Puedes pagar con tarjeta de crédito, débito o tu cuenta PayPal.
+      </p>
+    </div>
+  )
+}
 
 export default function PartnerTourRequest() {
   const navigate = useNavigate()
@@ -57,6 +136,10 @@ export default function PartnerTourRequest() {
 
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Payment method state
+  const [paymentMethod, setPaymentMethod] = useState<'comprobante' | 'paypal'>('comprobante')
+  const [paypalConfig, setPaypalConfig] = useState<{ paypal_enabled: boolean; paypal_client_id: string | null; paypal_mode: string }>({ paypal_enabled: false, paypal_client_id: null, paypal_mode: 'sandbox' })
+
   // Comprobante upload
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null)
   const [comprobantePreview, setComprobantePreview] = useState<string | null>(null)
@@ -68,6 +151,10 @@ export default function PartnerTourRequest() {
         setActividades(res.data.filter(a => a.activa))
       }
       setLoadingActs(false)
+    })
+    // Load PayPal config
+    getPartnerPayPalConfig().then(res => {
+      if (res.success) setPaypalConfig(res.data)
     })
   }, [])
 
@@ -139,23 +226,54 @@ export default function PartnerTourRequest() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const handleSubmit = async () => {
-    // Validate all required fields
+  // Build tour data object (shared between comprobante and PayPal flows)
+  const buildTourData = (comprobanteUrl?: string) => {
+    const data: any = {
+      cliente: form.cliente,
+      whatsapp: form.whatsapp,
+      actividad: selectedAct!.nombre,
+      fecha: selectedDate,
+      hora: selectedSlot?.hora || '',
+      notas: form.notas,
+      pax: parseInt(form.pax) || 1,
+      email_cliente: form.email,
+      hotel: `${form.hotel} - Hab/Apto: ${form.habitacion}`,
+      nacionalidad: form.nacionalidad,
+      idioma: form.idioma,
+      edades: form.edades,
+      solicitado_por: form.vendedor_nombre,
+      gestionado_por: user?.nombre || 'Partner',
+    }
+    if (comprobanteUrl) data.comprobante_url = comprobanteUrl
+    if (selectedSlot) data.slot_id = selectedSlot.id
+    return data
+  }
+
+  // Validate form fields (shared)
+  const validateForm = (): boolean => {
     const requiredFields = ['cliente', 'whatsapp', 'email', 'hotel', 'habitacion', 'nacionalidad', 'idioma', 'edades', 'notas', 'vendedor_nombre']
     const missingFields = requiredFields.filter(f => !form[f as keyof typeof form]?.trim())
-    if (missingFields.length > 0 || !selectedAct || !comprobanteFile) {
-      setResult({ type: 'error', message: 'Todos los campos son obligatorios, incluyendo notas y comprobante de pago' })
-      return
+    if (missingFields.length > 0 || !selectedAct) {
+      setResult({ type: 'error', message: 'Todos los campos son obligatorios' })
+      return false
     }
     if (!selectedDate) {
       setResult({ type: 'error', message: 'Debes seleccionar una fecha' })
+      return false
+    }
+    return true
+  }
+
+  // Comprobante submit flow (original)
+  const handleSubmitComprobante = async () => {
+    if (!validateForm() || !comprobanteFile) {
+      setResult({ type: 'error', message: 'Todos los campos y el comprobante de pago son obligatorios' })
       return
     }
     setSaving(true)
     setResult(null)
 
     try {
-      // First upload the comprobante
       setUploading(true)
       const uploadRes = await uploadFile(comprobanteFile)
       setUploading(false)
@@ -166,28 +284,7 @@ export default function PartnerTourRequest() {
         return
       }
 
-      const data: any = {
-        cliente: form.cliente,
-        whatsapp: form.whatsapp,
-        actividad: selectedAct.nombre,
-        fecha: selectedDate,
-        hora: selectedSlot?.hora || '',
-        notas: form.notas,
-        pax: parseInt(form.pax) || 1,
-        comprobante_url: uploadRes.data.url,
-        email_cliente: form.email,
-        hotel: `${form.hotel} - Hab/Apto: ${form.habitacion}`,
-        nacionalidad: form.nacionalidad,
-        idioma: form.idioma,
-        edades: form.edades,
-        solicitado_por: form.vendedor_nombre,
-        gestionado_por: user?.nombre || 'Partner',
-      }
-
-      if (selectedSlot) {
-        data.slot_id = selectedSlot.id
-      }
-
+      const data = buildTourData(uploadRes.data.url)
       const res = await createTour(data)
       if (res.success) {
         setResult({ type: 'success', message: `¡Tour solicitado! ID: ${res.data?.id}. Mahana lo confirmará pronto.` })
@@ -199,6 +296,22 @@ export default function PartnerTourRequest() {
       setResult({ type: 'error', message: 'Error de conexión' })
     }
     setSaving(false)
+  }
+
+  // PayPal success handler
+  const handlePayPalSuccess = (tourId: number) => {
+    setResult({ type: 'success', message: `¡Tour #${tourId} pagado exitosamente con PayPal! Mahana gestionará tu comisión.` })
+    setStep(5)
+  }
+
+  const handlePayPalError = (msg: string) => {
+    setResult({ type: 'error', message: msg })
+  }
+
+  // Check if form is valid for PayPal (no comprobante needed)
+  const isFormValidForPayPal = () => {
+    const requiredFields = ['cliente', 'whatsapp', 'email', 'hotel', 'habitacion', 'nacionalidad', 'idioma', 'edades', 'notas', 'vendedor_nombre']
+    return requiredFields.every(f => form[f as keyof typeof form]?.trim()) && selectedAct && selectedDate
   }
 
   const onChange = (field: string, value: string) => setForm(prev => ({ ...prev, [field]: value }))
@@ -609,54 +722,130 @@ export default function PartnerTourRequest() {
             <p className="text-xs text-gray-400 mt-1">⚠️ Incluir siempre: lugar de salida y detalles del tour</p>
           </div>
 
-          {/* Comprobante de pago — OBLIGATORIO */}
+          {/* Payment Method Selector */}
           <div className="border-t border-gray-100 pt-5">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Comprobante de pago *
-              <span className="text-gray-400 font-normal ml-1">(obligatorio)</span>
-            </label>
-            
-            {!comprobantePreview ? (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
+            <label className="block text-sm font-medium text-gray-700 mb-3">Método de pago</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('comprobante')}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  paymentMethod === 'comprobante'
+                    ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-200'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
               >
-                <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3 group-hover:text-blue-400 transition-colors" />
-                <p className="text-sm font-medium text-gray-600 group-hover:text-blue-600">
-                  Haz clic para subir foto del comprobante
-                </p>
-                <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF — Máx 10MB</p>
-              </div>
-            ) : (
-              <div className="relative border border-gray-200 rounded-xl overflow-hidden">
-                <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-64 object-contain bg-gray-50" />
-                <button
-                  onClick={removeComprobante}
-                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="px-4 py-2 bg-green-50 border-t border-green-100 flex items-center gap-2">
-                  <Image className="w-4 h-4 text-green-600" />
-                  <span className="text-sm text-green-700 font-medium">{comprobanteFile?.name}</span>
-                  <span className="text-xs text-green-500 ml-auto">{comprobanteFile ? `${(comprobanteFile.size / 1024).toFixed(0)} KB` : ''}</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <Upload className={`w-5 h-5 ${paymentMethod === 'comprobante' ? 'text-blue-600' : 'text-gray-400'}`} />
+                  <span className={`text-sm font-semibold ${paymentMethod === 'comprobante' ? 'text-blue-700' : 'text-gray-700'}`}>Comprobante</span>
                 </div>
-              </div>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,.pdf"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-            {!comprobanteFile && (
-              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" /> Debes subir un comprobante de pago para continuar
-              </p>
-            )}
+                <p className="text-[11px] text-gray-500">Subir foto del comprobante. Mahana cobra después.</p>
+              </button>
+
+              {paypalConfig.paypal_enabled && paypalConfig.paypal_client_id && (
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('paypal')}
+                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                    paymentMethod === 'paypal'
+                      ? 'border-yellow-500 bg-yellow-50 ring-1 ring-yellow-200'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <CreditCard className={`w-5 h-5 ${paymentMethod === 'paypal' ? 'text-yellow-600' : 'text-gray-400'}`} />
+                    <span className={`text-sm font-semibold ${paymentMethod === 'paypal' ? 'text-yellow-700' : 'text-gray-700'}`}>PayPal / Tarjeta</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500">Pagar ahora. Sin cobro pendiente.</p>
+                </button>
+              )}
+            </div>
           </div>
 
+          {/* Comprobante Upload (when comprobante method selected) */}
+          {paymentMethod === 'comprobante' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Comprobante de pago *
+                <span className="text-gray-400 font-normal ml-1">(obligatorio)</span>
+              </label>
+              
+              {!comprobantePreview ? (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all group"
+                >
+                  <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3 group-hover:text-blue-400 transition-colors" />
+                  <p className="text-sm font-medium text-gray-600 group-hover:text-blue-600">
+                    Haz clic para subir foto del comprobante
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">JPG, PNG o PDF — Máx 10MB</p>
+                </div>
+              ) : (
+                <div className="relative border border-gray-200 rounded-xl overflow-hidden">
+                  <img src={comprobantePreview} alt="Comprobante" className="w-full max-h-64 object-contain bg-gray-50" />
+                  <button
+                    onClick={removeComprobante}
+                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="px-4 py-2 bg-green-50 border-t border-green-100 flex items-center gap-2">
+                    <Image className="w-4 h-4 text-green-600" />
+                    <span className="text-sm text-green-700 font-medium">{comprobanteFile?.name}</span>
+                    <span className="text-xs text-green-500 ml-auto">{comprobanteFile ? `${(comprobanteFile.size / 1024).toFixed(0)} KB` : ''}</span>
+                  </div>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              {!comprobanteFile && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Debes subir un comprobante de pago para continuar
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* PayPal Buttons (when PayPal method selected) */}
+          {paymentMethod === 'paypal' && paypalConfig.paypal_enabled && paypalConfig.paypal_client_id && (
+            <div className="space-y-4">
+              {/* Price summary */}
+              <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-yellow-800 font-medium">Total a pagar:</span>
+                  <span className="text-2xl font-bold text-yellow-800">
+                    ${((selectedAct?.precio_base || 0) * (parseInt(form.pax) || 1)).toFixed(2)} USD
+                  </span>
+                </div>
+                <p className="text-[11px] text-yellow-600 mt-1">
+                  {selectedAct?.nombre} × {form.pax || 1} persona{(parseInt(form.pax) || 1) !== 1 ? 's' : ''}
+                </p>
+              </div>
+
+              {!isFormValidForPayPal() ? (
+                <div className="bg-gray-50 rounded-xl p-4 text-center">
+                  <AlertCircle className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Completa todos los campos obligatorios para habilitar el pago</p>
+                </div>
+              ) : (
+                <PayPalPartnerButtons
+                  clientId={paypalConfig.paypal_client_id!}
+                  mode={paypalConfig.paypal_mode}
+                  tourData={buildTourData()}
+                  onSuccess={handlePayPalSuccess}
+                  onError={handlePayPalError}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons (only for comprobante method) */}
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
@@ -665,14 +854,16 @@ export default function PartnerTourRequest() {
             >
               Atrás
             </button>
-            <button
-              onClick={handleSubmit}
-              disabled={saving || !form.cliente.trim() || !form.whatsapp.trim() || !form.email.trim() || !form.hotel.trim() || !form.habitacion.trim() || !form.nacionalidad.trim() || !form.idioma || !form.edades.trim() || !form.notas.trim() || !form.vendedor_nombre.trim() || !comprobanteFile}
-              className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-md shadow-blue-600/30"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {uploading ? 'Subiendo comprobante...' : 'Solicitar Tour'}
-            </button>
+            {paymentMethod === 'comprobante' && (
+              <button
+                onClick={handleSubmitComprobante}
+                disabled={saving || !form.cliente.trim() || !form.whatsapp.trim() || !form.email.trim() || !form.hotel.trim() || !form.habitacion.trim() || !form.nacionalidad.trim() || !form.idioma || !form.edades.trim() || !form.notas.trim() || !form.vendedor_nombre.trim() || !comprobanteFile}
+                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-md shadow-blue-600/30"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {uploading ? 'Subiendo comprobante...' : 'Solicitar Tour'}
+              </button>
+            )}
           </div>
         </div>
       )}

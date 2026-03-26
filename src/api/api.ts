@@ -765,3 +765,36 @@ export async function getPartnerCxC(): Promise<ApiResponse<{ tours: CxCTour[]; s
     return { success: false, data: { tours: [], summary: { por_pagar: 0, pagado: 0, count_pendiente: 0, count_pagado: 0 } }, error: { code: 'NETWORK', message: 'Error de conexión' } }
   }
 }
+
+// ── Partner PayPal ──
+
+export async function getPartnerPayPalConfig(): Promise<ApiResponse<{ paypal_enabled: boolean; paypal_client_id: string | null; paypal_mode: string }>> {
+  try {
+    const response = await api.get('/partner/paypal-config')
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: { paypal_enabled: false, paypal_client_id: null, paypal_mode: 'sandbox' }, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function partnerPayPalCreateOrder(tourData: Record<string, any>): Promise<ApiResponse<{ orderID: string; tourId: number; precioTotal: number }>> {
+  try {
+    const response = await api.post('/partner/paypal/create-order', { tourData })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: { orderID: '', tourId: 0, precioTotal: 0 }, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function partnerPayPalCaptureOrder(orderID: string, tourId: number): Promise<ApiResponse<{ tourId: number; estado: string; paypal_status: string; mensaje: string }>> {
+  try {
+    const response = await api.post('/partner/paypal/capture-order', { orderID, tourId })
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: { tourId: 0, estado: '', paypal_status: '', mensaje: '' }, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
