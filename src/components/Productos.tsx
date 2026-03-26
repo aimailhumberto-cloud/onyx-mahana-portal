@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import {
   Plus, Edit3, Trash2, ToggleLeft, ToggleRight, X, Save, Loader2,
   Waves, Mountain, MapPin, Truck, Package, Search, AlertCircle, CheckCircle,
-  Building2, Clock, Users, DollarSign, ChevronDown, ChevronUp, ImageIcon
+  Building2, Clock, Users, DollarSign, ChevronDown, ChevronUp, ImageIcon,
+  Copy, Link2, Globe, Eye, EyeOff
 } from 'lucide-react'
 import {
   getActividades, createActividad, updateActividad, deleteActividad,
@@ -21,11 +22,18 @@ const CATEGORIAS = [
   { key: 'Otro', label: '📦 Otro', icon: Package, color: 'bg-gray-50 border-gray-200 text-gray-600' },
 ]
 
+const SITIOS_OPTIONS = [
+  { key: 'mahanatours', label: 'Mahana Tours' },
+  { key: 'ans-surf', label: 'ANS Surf' },
+  { key: 'circuito-chame', label: 'Circuito Chamé' },
+]
+
 const EMPTY_ACT: Partial<Actividad> = {
   nombre: '', tipo: 'tour', categoria: 'Acuáticas', descripcion: '', unidad: 'Por pax',
   duracion: '', horario: '', punto_encuentro: '', que_incluye: '', que_llevar: '',
   requisitos: '', disponibilidad: 'Todo el año', precio_base: null, costo_base: null,
   costo_instructor: null, comision_caracol_pct: null, capacidad_max: null, transporte: 0, activa: 1,
+  slug: null, visible_web: 0, sitios: null, imagen_url: null,
 }
 
 const EMPTY_PROP: Partial<Propiedad> = {
@@ -48,6 +56,7 @@ export default function Productos() {
   const [propForm, setPropForm] = useState<Partial<Propiedad>>(EMPTY_PROP)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
 
   // Expanded cards
@@ -408,6 +417,7 @@ export default function Productos() {
                   <Input label="Qué llevar" value={actForm.que_llevar || ''} onChange={v => setActForm({ ...actForm, que_llevar: v })} placeholder="Bloqueador, Toalla" />
                   <Input label="Requisitos" value={actForm.requisitos || ''} onChange={v => setActForm({ ...actForm, requisitos: v })} placeholder="Saber nadar" />
                   <NumberInput label="Capacidad Máx." value={actForm.capacidad_max} onChange={v => setActForm({ ...actForm, capacidad_max: v })} integer />
+                  {/* Imagen del Producto */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Imagen del Producto</label>
                     <div className="flex items-center gap-3">
@@ -418,15 +428,201 @@ export default function Productos() {
                           <ImageIcon className="w-6 h-6 text-gray-300" />
                         </div>
                       )}
-                      <label className="cursor-pointer px-3 py-2 bg-turquoise-50 text-turquoise-700 border border-turquoise-200 rounded-lg text-sm font-medium hover:bg-turquoise-100 transition-colors flex items-center gap-1.5">
-                        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                        {uploading ? 'Subiendo...' : 'Subir Foto'}
-                        <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                      </label>
-                      {actForm.imagen_url && (
-                        <button onClick={() => setActForm({ ...actForm, imagen_url: '' })} className="text-xs text-red-500 hover:underline">Quitar</button>
-                      )}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="cursor-pointer px-3 py-2 bg-turquoise-50 text-turquoise-700 border border-turquoise-200 rounded-lg text-sm font-medium hover:bg-turquoise-100 transition-colors flex items-center gap-1.5">
+                          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                          {uploading ? 'Subiendo...' : 'Subir Foto'}
+                          <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                        </label>
+                        {actForm.imagen_url && (
+                          <button onClick={() => setActForm({ ...actForm, imagen_url: '' })} className="text-xs text-red-500 hover:underline">Quitar</button>
+                        )}
+                      </div>
                     </div>
+                    {/* URL de imagen (para pegar URL externa) */}
+                    <div className="mt-2">
+                      <input
+                        value={actForm.imagen_url || ''}
+                        onChange={e => setActForm({ ...actForm, imagen_url: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 text-sm text-gray-600"
+                        placeholder="O pegar URL de imagen: https://..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* ═══ INTEGRACIÓN WEB ═══ */}
+                  <div className="border-t border-gray-200 pt-4 mt-2">
+                    <h3 className="text-sm font-bold text-azul-900 flex items-center gap-2 mb-3">
+                      <Globe className="w-4 h-4 text-turquoise-600" />
+                      Integración Web & Booking
+                    </h3>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Slug */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Slug (URL del producto)</label>
+                        <input
+                          value={actForm.slug || ''}
+                          onChange={e => setActForm({ ...actForm, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-turquoise-500 text-sm"
+                          placeholder="ej: surf-lesson"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-0.5">Solo letras, números y guiones</p>
+                      </div>
+
+                      {/* Visible Web */}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Visible en Web</label>
+                        <button
+                          type="button"
+                          onClick={() => setActForm({ ...actForm, visible_web: actForm.visible_web ? 0 : 1 })}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all w-full ${
+                            actForm.visible_web
+                              ? 'bg-green-50 border-green-300 text-green-700'
+                              : 'bg-gray-50 border-gray-200 text-gray-500'
+                          }`}
+                        >
+                          {actForm.visible_web ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                          {actForm.visible_web ? 'Visible en booking' : 'Oculto en booking'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Sitios */}
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">Sitios donde está activo</label>
+                      <div className="flex flex-wrap gap-2">
+                        {SITIOS_OPTIONS.map(sitio => {
+                          const currentSitios: string[] = actForm.sitios ? (typeof actForm.sitios === 'string' ? JSON.parse(actForm.sitios) : actForm.sitios) : []
+                          const isActive = currentSitios.includes(sitio.key)
+                          return (
+                            <button
+                              key={sitio.key}
+                              type="button"
+                              onClick={() => {
+                                const updated = isActive
+                                  ? currentSitios.filter(s => s !== sitio.key)
+                                  : [...currentSitios, sitio.key]
+                                setActForm({ ...actForm, sitios: JSON.stringify(updated) })
+                              }}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                isActive
+                                  ? 'bg-turquoise-100 border-turquoise-300 text-turquoise-700'
+                                  : 'bg-gray-50 border-gray-200 text-gray-400 hover:border-gray-300'
+                              }`}
+                            >
+                              {isActive ? '✓ ' : ''}{sitio.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Integration Links — only show when slug exists */}
+                    {actForm.slug && (
+                      <div className="mt-4 bg-gradient-to-r from-turquoise-50 to-blue-50 rounded-xl p-4 border border-turquoise-200">
+                        <h4 className="text-xs font-bold text-turquoise-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                          <Link2 className="w-3.5 h-3.5" />
+                          Enlaces para el Webmaster
+                        </h4>
+                        <div className="space-y-2.5">
+                          {/* Booking URL */}
+                          <div>
+                            <p className="text-[10px] text-turquoise-600 font-medium mb-1">🔗 URL de Booking (para botón "Reservar")</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-white px-3 py-2 rounded-lg text-xs text-gray-700 border border-turquoise-100 font-mono truncate">
+                                {window.location.origin}/booking/{actForm.slug}
+                              </code>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/booking/${actForm.slug}`)
+                                  setCopiedField('booking')
+                                  setTimeout(() => setCopiedField(null), 2000)
+                                }}
+                                className={`p-2 rounded-lg transition-all shrink-0 ${
+                                  copiedField === 'booking'
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-white border border-turquoise-200 text-turquoise-600 hover:bg-turquoise-100'
+                                }`}
+                                title="Copiar"
+                              >
+                                {copiedField === 'booking' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Embeddable URL */}
+                          <div>
+                            <p className="text-[10px] text-turquoise-600 font-medium mb-1">📦 URL Embebible (para iframe)</p>
+                            <div className="flex items-center gap-2">
+                              <code className="flex-1 bg-white px-3 py-2 rounded-lg text-xs text-gray-700 border border-turquoise-100 font-mono truncate">
+                                {window.location.origin}/booking/{actForm.slug}?embed=1
+                              </code>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${window.location.origin}/booking/${actForm.slug}?embed=1`)
+                                  setCopiedField('embed')
+                                  setTimeout(() => setCopiedField(null), 2000)
+                                }}
+                                className={`p-2 rounded-lg transition-all shrink-0 ${
+                                  copiedField === 'embed'
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-white border border-turquoise-200 text-turquoise-600 hover:bg-turquoise-100'
+                                }`}
+                                title="Copiar"
+                              >
+                                {copiedField === 'embed' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Image URL */}
+                          {actForm.imagen_url && (
+                            <div>
+                              <p className="text-[10px] text-turquoise-600 font-medium mb-1">🖼️ URL de Imagen Hero</p>
+                              <div className="flex items-center gap-2">
+                                <code className="flex-1 bg-white px-3 py-2 rounded-lg text-xs text-gray-700 border border-turquoise-100 font-mono truncate">
+                                  {actForm.imagen_url}
+                                </code>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(actForm.imagen_url || '')
+                                    setCopiedField('imagen')
+                                    setTimeout(() => setCopiedField(null), 2000)
+                                  }}
+                                  className={`p-2 rounded-lg transition-all shrink-0 ${
+                                    copiedField === 'imagen'
+                                      ? 'bg-green-500 text-white'
+                                      : 'bg-white border border-turquoise-200 text-turquoise-600 hover:bg-turquoise-100'
+                                  }`}
+                                  title="Copiar"
+                                >
+                                  {copiedField === 'imagen' ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Preview button */}
+                          <div className="flex items-center gap-2 pt-1">
+                            <a
+                              href={`/booking/${actForm.slug}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-turquoise-600 text-white rounded-lg text-xs font-medium hover:bg-turquoise-700 transition-colors shadow-sm"
+                            >
+                              <Globe className="w-3.5 h-3.5" />
+                              Ver Booking Page ↗
+                            </a>
+                            {!actForm.visible_web && (
+                              <span className="text-[10px] text-orange-600 bg-orange-50 px-2 py-1 rounded-lg border border-orange-200">
+                                ⚠️ Producto oculto — activa "Visible en Web" para que aparezca
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
