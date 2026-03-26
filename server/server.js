@@ -33,11 +33,10 @@ const upload = multer({
 
 const app = express();
 const PORT = process.env.PORT || 3101;
-const API_KEY = process.env.API_KEY || (process.env.NODE_ENV === 'production' ? '' : 'mahana-dev-key-2026');
+const API_KEY = process.env.API_KEY || 'mahana-dev-key-2026';
 
-if (process.env.NODE_ENV === 'production' && !API_KEY) {
-  console.error('❌ FATAL: API_KEY env var is required in production');
-  process.exit(1);
+if (process.env.NODE_ENV === 'production' && API_KEY === 'mahana-dev-key-2026') {
+  console.warn('⚠️  WARNING: Using default API_KEY in production. Set API_KEY env var for security.');
 }
 
 // ── Middleware ──
