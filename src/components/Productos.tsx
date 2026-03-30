@@ -33,7 +33,7 @@ const EMPTY_ACT: Partial<Actividad> = {
   duracion: '', horario: '', punto_encuentro: '', que_incluye: '', que_llevar: '',
   requisitos: '', disponibilidad: 'Todo el año', precio_base: null, costo_base: null,
   costo_instructor: null, comision_caracol_pct: null, capacidad_max: null, transporte: 0, activa: 1,
-  slug: null, visible_web: 0, sitios: null, imagen_url: null,
+  slug: null, visible_web: 1, sitios: null, imagen_url: null,
 }
 
 const EMPTY_PROP: Partial<Propiedad> = {

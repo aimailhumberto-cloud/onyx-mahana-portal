@@ -2371,7 +2371,7 @@ app.post('/api/v1/plantillas/generar', requireAuth, requireRole('admin'), (req, 
       for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(year, month - 1, day);
         const dayOfWeek = date.getDay(); // 0=Sun ... 6=Sat
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
         for (const p of plantillas) {
           if (p.dia_semana === dayOfWeek) {
