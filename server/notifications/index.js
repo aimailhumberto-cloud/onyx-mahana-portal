@@ -387,6 +387,83 @@ async function onBookingPaid(booking) {
   return results;
 }
 
+// ── Ticket Events (Quality System) ──
+
+async function onTicketCreated(ticket) {
+  const results = {};
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+
+  if (tgChatId) {
+    try {
+      const prioEmoji = { critica: '🔴', alta: '🟠', media: '🟡', baja: '⚪' };
+      const emoji = prioEmoji[ticket.prioridad] || '🟡';
+      let msg = `🎫 *Nuevo Ticket ${ticket.codigo}*\n`;
+      msg += `${emoji} Prioridad: ${ticket.prioridad}\n`;
+      msg += `📋 ${ticket.tipo}: ${ticket.categoria || 'Sin categoría'}\n`;
+      msg += `👤 Cliente: ${ticket.cliente}\n`;
+      if (ticket.actividad) msg += `🏄 Tour: ${ticket.actividad}\n`;
+      if (ticket.vendedor) msg += `🏢 Vendedor: ${ticket.vendedor}\n`;
+      msg += `📝 ${ticket.descripcion?.substring(0, 200)}`;
+      if (ticket.recurrence?.isRecurrent) {
+        msg += `\n\n⚠️ *RECURRENCIA DETECTADA*: ${ticket.recurrence.count + 1} tickets de "${ticket.categoria}" para "${ticket.actividad}"`;
+      }
+      results.telegram = await telegram.sendTelegram(tgChatId, msg);
+    } catch (err) {
+      console.error('🔔 Notification error (telegram/ticket):', err.message);
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+
+  console.log(`🔔 Ticket ${ticket.codigo} notification:`, JSON.stringify(results));
+  return results;
+}
+
+async function onTicketResolved(ticket) {
+  const results = {};
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+
+  if (tgChatId) {
+    try {
+      let msg = `✅ *Ticket ${ticket.codigo} Resuelto*\n`;
+      msg += `👤 ${ticket.cliente}\n`;
+      if (ticket.actividad) msg += `🏄 ${ticket.actividad}\n`;
+      if (ticket.respuesta) msg += `💬 ${ticket.respuesta.substring(0, 200)}\n`;
+      if (ticket.accion_correctiva) msg += `🔧 Acción: ${ticket.accion_correctiva.substring(0, 200)}`;
+      results.telegram = await telegram.sendTelegram(tgChatId, msg);
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+
+  return results;
+}
+
+async function onReviewSubmitted(review) {
+  const results = {};
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+
+  if (tgChatId) {
+    try {
+      const stars = '⭐'.repeat(review.score_general) + '☆'.repeat(5 - review.score_general);
+      let msg = `📝 *Nueva Reseña*\n`;
+      msg += `${stars} (${review.score_general}/5)\n`;
+      if (review.tour_actividad) msg += `🏄 ${review.tour_actividad}\n`;
+      if (review.tour_cliente) msg += `👤 ${review.tour_cliente}\n`;
+      if (review.comentario) msg += `💬 "${review.comentario.substring(0, 200)}"`;
+      if (review.score_general <= 3) {
+        msg += `\n\n🔴 Score bajo — ticket auto-creado`;
+      } else if (review.redirigido_google) {
+        msg += `\n\n🟢 Se invitó a dejar reseña en Google`;
+      }
+      results.telegram = await telegram.sendTelegram(tgChatId, msg);
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+
+  return results;
+}
+
 module.exports = {
   initialize,
   onTourCreated,
@@ -396,6 +473,9 @@ module.exports = {
   onEstadiaStatusChanged,
   onBookingCreated,
   onBookingPaid,
+  onTicketCreated,
+  onTicketResolved,
+  onReviewSubmitted,
   sendDailyReminders,
   sendDailySummary,
   verifyAll,

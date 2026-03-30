@@ -798,3 +798,226 @@ export async function partnerPayPalCaptureOrder(orderID: string, tourId: number)
   }
 }
 
+// ── Quality System: Tickets ──
+
+export interface Ticket {
+  id: number
+  codigo: string
+  tour_id: number | null
+  actividad: string | null
+  vendedor: string | null
+  responsable: string | null
+  cliente: string
+  whatsapp: string | null
+  email: string | null
+  tipo: 'queja' | 'sugerencia' | 'felicitacion' | 'incidente'
+  categoria: string | null
+  prioridad: 'baja' | 'media' | 'alta' | 'critica'
+  canal_origen: string
+  descripcion: string
+  evidencia_url: string | null
+  estatus: 'Abierto' | 'En Proceso' | 'Resuelto' | 'Cerrado'
+  asignado_a: string | null
+  respuesta: string | null
+  accion_correctiva: string | null
+  satisfaccion_resolucion: number | null
+  created_at: string
+  updated_at: string
+  resuelto_at: string | null
+  cerrado_at: string | null
+  creado_por: string | null
+  resuelto_por: string | null
+  recurrence?: { count: number; isRecurrent: boolean }
+}
+
+export interface TicketStats {
+  abiertos: number
+  en_proceso: number
+  resueltos: number
+  cerrados: number
+  total: number
+  porCategoria: { categoria: string; count: number }[]
+  porPrioridad: { prioridad: string; count: number }[]
+  porActividad: { actividad: string; count: number }[]
+  avgResolutionHours: number | null
+  recurrentes: { actividad: string; categoria: string; count: number }[]
+  avgSatisfaccion: number | null
+  tendencia: { mes: string; total: number; resueltos: number }[]
+}
+
+export interface Satisfaccion {
+  id: number
+  codigo_resena: string
+  tour_id: number | null
+  actividad: string | null
+  vendedor: string | null
+  responsable: string | null
+  cliente: string | null
+  score_general: number
+  score_guia: number | null
+  score_puntualidad: number | null
+  score_equipamiento: number | null
+  score_valor: number | null
+  comentario: string | null
+  fuente: string
+  redirigido_google: number
+  created_at: string
+}
+
+export interface SatisfaccionData {
+  general: {
+    total_resenas: number
+    avg_general: number | null
+    avg_guia: number | null
+    avg_puntualidad: number | null
+    avg_equipamiento: number | null
+    avg_valor: number | null
+    enviados_google: number
+  }
+  distribucion: { score: number; count: number }[]
+  tendencia: { mes: string; avg_score: number; total: number }[]
+  recientes: Satisfaccion[]
+}
+
+export interface ReviewData {
+  codigo: string
+  cliente: string
+  actividad: string
+  vendedor: string
+  responsable: string
+  fecha: string
+  hora: string
+  tour_id: number
+}
+
+export async function getTickets(params: Record<string, string | number> = {}): Promise<ApiResponse<Ticket[]>> {
+  try {
+    const response = await api.get('/tickets', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getTicketById(id: number): Promise<ApiResponse<Ticket>> {
+  const response = await api.get(`/tickets/${id}`)
+  return response.data
+}
+
+export async function getTicketStats(params: Record<string, string> = {}): Promise<ApiResponse<TicketStats>> {
+  try {
+    const response = await api.get('/tickets/stats', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: {} as TicketStats, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getTicketRecurrence(): Promise<ApiResponse<any[]>> {
+  try {
+    const response = await api.get('/tickets/recurrencia')
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function createTicket(data: Partial<Ticket>): Promise<ApiResponse<Ticket>> {
+  const response = await api.post('/tickets', data)
+  return response.data
+}
+
+export async function updateTicket(id: number, data: Partial<Ticket>): Promise<ApiResponse<Ticket>> {
+  const response = await api.put(`/tickets/${id}`, data)
+  return response.data
+}
+
+export async function updateTicketStatus(id: number, estatus: string): Promise<ApiResponse<Ticket>> {
+  const response = await api.patch(`/tickets/${id}/status`, { estatus })
+  return response.data
+}
+
+export async function assignTicket(id: number, asignado_a: string): Promise<ApiResponse<Ticket>> {
+  const response = await api.patch(`/tickets/${id}/assign`, { asignado_a })
+  return response.data
+}
+
+export async function getSatisfaccion(params: Record<string, string> = {}): Promise<ApiResponse<SatisfaccionData>> {
+  try {
+    const response = await api.get('/satisfaccion', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: {} as SatisfaccionData, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function getSatisfaccionRanking(tipo: 'actividad' | 'vendedor' = 'actividad'): Promise<ApiResponse<any[]>> {
+  try {
+    const response = await api.get('/satisfaccion/ranking', { params: { tipo } })
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function createSatisfaccion(data: Partial<Satisfaccion>): Promise<ApiResponse<Satisfaccion>> {
+  const response = await api.post('/satisfaccion', data)
+  return response.data
+}
+
+export async function getPartnerTickets(params: Record<string, string | number> = {}): Promise<ApiResponse<Ticket[]>> {
+  try {
+    const response = await api.get('/partner/tickets', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: [], error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function createPartnerTicket(data: Partial<Ticket>): Promise<ApiResponse<Ticket>> {
+  const response = await api.post('/partner/tickets', data)
+  return response.data
+}
+
+export async function getPartnerSatisfaccion(): Promise<ApiResponse<any>> {
+  try {
+    const response = await api.get('/partner/satisfaccion')
+    return response.data
+  } catch (err) {
+    return { success: false, data: {}, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function generateReviewLink(tourId: number): Promise<ApiResponse<{ codigo: string; url: string }>> {
+  const response = await api.post(`/tours/${tourId}/link-resena`)
+  return response.data
+}
+
+const publicApi = axios.create({ baseURL: '/api/v1', timeout: 10000 })
+
+export async function getPublicReview(codigo: string): Promise<ApiResponse<ReviewData>> {
+  try {
+    const response = await publicApi.get(`/public/resena/${codigo}`)
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: {} as ReviewData, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
+export async function submitPublicReview(codigo: string, data: {
+  score_general: number
+  score_guia?: number
+  score_puntualidad?: number
+  score_equipamiento?: number
+  score_valor?: number
+  comentario?: string
+}): Promise<ApiResponse<{ review: Satisfaccion; redirect_google: boolean; google_review_url: string | null }>> {
+  try {
+    const response = await publicApi.post(`/public/resena/${codigo}`, data)
+    return response.data
+  } catch (err: any) {
+    if (err.response?.data) return err.response.data
+    return { success: false, data: {} as any, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}

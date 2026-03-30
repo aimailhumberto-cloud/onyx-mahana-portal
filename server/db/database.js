@@ -362,6 +362,75 @@ function getDb() {
       );
     `);
 
+    // ── Tickets de Servicio (Quality System) ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tickets_servicio (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo TEXT UNIQUE,
+        tour_id INTEGER,
+        actividad TEXT,
+        vendedor TEXT,
+        responsable TEXT,
+        cliente TEXT NOT NULL,
+        whatsapp TEXT,
+        email TEXT,
+        tipo TEXT DEFAULT 'queja',
+        categoria TEXT,
+        prioridad TEXT DEFAULT 'media',
+        canal_origen TEXT DEFAULT 'portal',
+        descripcion TEXT NOT NULL,
+        evidencia_url TEXT,
+        estatus TEXT DEFAULT 'Abierto',
+        asignado_a TEXT,
+        respuesta TEXT,
+        accion_correctiva TEXT,
+        satisfaccion_resolucion INTEGER,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        resuelto_at TEXT,
+        cerrado_at TEXT,
+        creado_por TEXT,
+        resuelto_por TEXT
+      );
+    `);
+    try {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_estatus ON tickets_servicio(estatus)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_actividad ON tickets_servicio(actividad)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_vendedor ON tickets_servicio(vendedor)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_categoria ON tickets_servicio(categoria)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tickets_prioridad ON tickets_servicio(prioridad)');
+    } catch {}
+
+    // ── Satisfacción de Tours (Reviews) ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS satisfaccion_tours (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo_resena TEXT UNIQUE,
+        tour_id INTEGER,
+        actividad TEXT,
+        vendedor TEXT,
+        responsable TEXT,
+        cliente TEXT,
+        score_general INTEGER NOT NULL,
+        score_guia INTEGER,
+        score_puntualidad INTEGER,
+        score_equipamiento INTEGER,
+        score_valor INTEGER,
+        comentario TEXT,
+        fuente TEXT DEFAULT 'manual',
+        redirigido_google INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+    `);
+    try {
+      db.exec('CREATE INDEX IF NOT EXISTS idx_satisfaccion_actividad ON satisfaccion_tours(actividad)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_satisfaccion_vendedor ON satisfaccion_tours(vendedor)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_satisfaccion_codigo ON satisfaccion_tours(codigo_resena)');
+    } catch {}
+
+    // Add review link field to tours
+    addCol('reservas_tours', 'review_codigo', 'TEXT');
+
     console.log('✅ Database initialized at', DB_PATH);
   }
   return db;
@@ -369,7 +438,7 @@ function getDb() {
 
 // ── Table whitelist (prevents SQL injection via table names) ──
 
-const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones', 'bloqueos_fechas', 'reservas_config', 'configuracion_pagos', 'reservas_booking'];
+const VALID_TABLES = ['reservas_tours', 'reservas_estadias', 'actividades', 'propiedades', 'staff', 'usuarios', 'horarios_slots', 'plantillas_horario', 'alertas', 'configuracion_notificaciones', 'bloqueos_fechas', 'reservas_config', 'configuracion_pagos', 'reservas_booking', 'tickets_servicio', 'satisfaccion_tours'];
 
 function validateTable(table) {
   if (!VALID_TABLES.includes(table)) {

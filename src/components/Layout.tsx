@@ -13,7 +13,9 @@ import {
   Clock,
   Bell,
   Users,
-  DollarSign
+  DollarSign,
+  Ticket,
+  Star
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -23,6 +25,8 @@ const navigation = [
   { name: 'Estadías', href: '/estadias', icon: Building2 },
   { name: 'Calendario', href: '/calendario', icon: CalendarDays },
   { name: 'Facturación', href: '/facturacion', icon: DollarSign, adminOnly: true },
+  { name: 'Tickets', href: '/tickets', icon: Ticket, adminOnly: true },
+  { name: 'Satisfacción', href: '/satisfaccion', icon: Star, adminOnly: true },
   { name: 'Productos', href: '/productos', icon: Package, adminOnly: true },
   { name: 'Disponibilidad', href: '/disponibilidad', icon: Clock, adminOnly: true },
   { name: 'Notificaciones', href: '/notificaciones', icon: Bell, adminOnly: true },

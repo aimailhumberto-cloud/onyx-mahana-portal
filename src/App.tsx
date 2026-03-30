@@ -20,6 +20,10 @@ import NotificacionesConfig from './components/NotificacionesConfig'
 import UsuariosAdmin from './components/UsuariosAdmin'
 import Facturacion from './components/Facturacion'
 import BookingPage from './components/BookingPage'
+import TicketsServicio from './components/TicketsServicio'
+import SatisfaccionDashboard from './components/SatisfaccionDashboard'
+import PartnerTickets from './components/partner/PartnerTickets'
+import ReviewPage from './components/ReviewPage'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Loader2 } from 'lucide-react'
 
@@ -43,6 +47,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/booking/:slug" element={<BookingPage />} />
+        <Route path="/resena/:codigo" element={<ReviewPage />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
@@ -57,7 +62,9 @@ function AppRoutes() {
           <Route path="solicitar" element={<PartnerTourRequest />} />
           <Route path="reservas" element={<PartnerReservations />} />
           <Route path="facturas" element={<PartnerFacturacion />} />
+          <Route path="calidad" element={<PartnerTickets />} />
         </Route>
+        <Route path="/resena/:codigo" element={<ReviewPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -86,9 +93,12 @@ function AppRoutes() {
         <Route path="notificaciones" element={<AdminOnly><NotificacionesConfig /></AdminOnly>} />
         <Route path="usuarios" element={<AdminOnly><UsuariosAdmin /></AdminOnly>} />
         <Route path="facturacion" element={<AdminOnly><Facturacion /></AdminOnly>} />
+        <Route path="tickets" element={<AdminOnly><TicketsServicio /></AdminOnly>} />
+        <Route path="satisfaccion" element={<AdminOnly><SatisfaccionDashboard /></AdminOnly>} />
         <Route path="admin" element={<AdminOnly><AdminPanel /></AdminOnly>} />
       </Route>
       <Route path="/booking/:slug" element={<BookingPage />} />
+      <Route path="/resena/:codigo" element={<ReviewPage />} />
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

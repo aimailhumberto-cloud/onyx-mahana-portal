@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { Home, PlusCircle, List, LogOut, Menu, X, FileText } from 'lucide-react'
+import { Home, PlusCircle, List, LogOut, Menu, X, FileText, Ticket } from 'lucide-react'
 import { useState } from 'react'
 
 const partnerNav = [
@@ -8,6 +8,7 @@ const partnerNav = [
   { name: 'Solicitar Tour', href: '/solicitar', icon: PlusCircle },
   { name: 'Mis Reservas', href: '/reservas', icon: List },
   { name: 'Mis Facturas', href: '/facturas', icon: FileText },
+  { name: 'Calidad', href: '/calidad', icon: Ticket },
 ]
 
 export default function PartnerLayout() {
