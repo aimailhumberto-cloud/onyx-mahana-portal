@@ -777,6 +777,10 @@ app.get('/api/v1/dashboard', requireAuth, (req, res) => {
       ) ORDER BY mes DESC
     `).all().map(r => r.mes);
 
+    const ticketsAbiertos = db.prepare(`
+      SELECT COUNT(*) as total FROM tickets_servicio WHERE estatus IN ('Abierto', 'En Proceso')
+    `).get();
+
     success(res, {
       resumen: {
         tours_total: tours.total,
@@ -795,6 +799,9 @@ app.get('/api/v1/dashboard', requireAuth, (req, res) => {
         reservados: tours.reservados,
         consultas: tours.consultas,
         por_aprobar: tours.por_aprobar || 0
+      },
+      tickets_servicio: {
+        abiertos: ticketsAbiertos.total || 0
       },
       recientes: recientesQuery,
       mesActual: currentMonth,

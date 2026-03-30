@@ -111,9 +111,14 @@ export default function Dashboard() {
             <img src="/ans-logo.jpg" alt="ANS" className="h-7 rounded-md bg-white px-1.5 py-0.5" />
             <img src="/caracol-logo.png" alt="Caracol" className="h-7 rounded-md bg-white px-1.5 py-0.5" />
             {data.tours_por_estatus?.por_aprobar > 0 && (
-              <span className="bg-orange-500 text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse">
+              <button onClick={() => navigate('/tours?estado=Por%20Aprobar')} className="bg-orange-500 hover:bg-orange-600 transition-colors text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse shadow-sm">
                 {data.tours_por_estatus.por_aprobar} Por Aprobar
-              </span>
+              </button>
+            )}
+            {(data.tickets_servicio?.abiertos || 0) > 0 && (
+              <button onClick={() => navigate('/calidad')} className="bg-red-500 hover:bg-red-600 transition-colors text-white text-xs font-bold px-2.5 py-1 rounded-full animate-pulse shadow-sm flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> {data.tickets_servicio!.abiertos} Tickets Abiertos
+              </button>
             )}
           </div>
           <div className="relative">

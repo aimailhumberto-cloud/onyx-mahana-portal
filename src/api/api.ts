@@ -199,6 +199,7 @@ export interface DashboardData {
   ventas_partners: { total: number; ingresos: number; comisiones: number }
   estadias: { total: number; pendientes: number; confirmadas: number; comisiones: number }
   tours_por_estatus: { pagados: number; reservados: number; consultas: number; por_aprobar: number }
+  tickets_servicio?: { abiertos: number }
   recientes: Array<{
     tipo: string
     id: number
