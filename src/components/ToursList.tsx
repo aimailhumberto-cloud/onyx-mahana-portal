@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Calendar, MapPin, Download, CheckCircle, XCircle, Building2, ChevronDown, ChevronUp, Image, FileText, Trash2 } from 'lucide-react'
-import { getTours, getCharts, aprobarTour, rechazarTour, updateTourStatus, getTourById, deleteTour } from '../api/api'
+import { Search, Loader2, AlertCircle, Bot, User, ChevronLeft, ChevronRight, DollarSign, TrendingUp, Calendar, MapPin, Download, CheckCircle, XCircle, Building2, ChevronDown, ChevronUp, Image, FileText, Trash2, Star, Copy, Check } from 'lucide-react'
+import { getTours, getCharts, aprobarTour, rechazarTour, updateTourStatus, getTourById, deleteTour, generateReviewLink } from '../api/api'
 import type { Tour, Meta } from '../api/api'
 import { downloadCSV } from '../utils/exportUtils'
 
@@ -44,6 +44,7 @@ export default function ToursList() {
   const [expandedDetail, setExpandedDetail] = useState<any>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [deleteModal, setDeleteModal] = useState<{ id: number; cliente: string } | null>(null)
+  const [reviewLink, setReviewLink] = useState<{ tourId: number; url: string; copied: boolean } | null>(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -165,6 +166,24 @@ export default function ToursList() {
       }
     } catch { }
     setActionLoading(false)
+  }
+
+  const handleGenerateReviewLink = async (tourId: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const res = await generateReviewLink(tourId)
+      if (res.success) {
+        const fullUrl = `${window.location.origin}/resena/${res.data.codigo}?tipo=solicitada`
+        setReviewLink({ tourId, url: fullUrl, copied: false })
+        try {
+          await navigator.clipboard.writeText(fullUrl)
+          setReviewLink({ tourId, url: fullUrl, copied: true })
+          setTimeout(() => setReviewLink(null), 4000)
+        } catch {
+          // Fallback: show the URL for manual copy
+        }
+      }
+    } catch {}
   }
 
   return (
@@ -394,6 +413,23 @@ export default function ToursList() {
                                       className="flex items-center gap-1.5 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors ml-auto">
                                       <Trash2 className="w-4 h-4" /> Eliminar
                                     </button>
+                                    {/* Review link button */}
+                                    {['Pagado', 'Reservado', 'Cerrado'].includes(t.estatus) && (
+                                      reviewLink?.tourId === t.id ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700" onClick={e => e.stopPropagation()}>
+                                          {reviewLink.copied ? (
+                                            <><Check className="w-4 h-4" /> Link copiado al portapapeles!</>
+                                          ) : (
+                                            <><Copy className="w-4 h-4" /> <input readOnly value={reviewLink.url} className="bg-transparent text-xs w-48 outline-none" onClick={e => { e.stopPropagation(); (e.target as HTMLInputElement).select() }} /></>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <button onClick={(e) => handleGenerateReviewLink(t.id, e)}
+                                          className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-100 transition-colors">
+                                          <Star className="w-4 h-4" /> Pedir Reseña
+                                        </button>
+                                      )
+                                    )}
                                   </div>
                                 </div>
                                 {/* Right: Comprobante */}

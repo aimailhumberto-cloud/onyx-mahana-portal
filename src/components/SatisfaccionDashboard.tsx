@@ -273,8 +273,10 @@ export default function SatisfaccionDashboard() {
                   </div>
                   <div className="text-right">
                     <span className="text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString('es-PA')}</span>
-                    <div className="flex gap-1 mt-1">
-                      {r.fuente === 'link_resena' && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">Link</span>}
+                    <div className="flex gap-1 mt-1 flex-wrap">
+                      {r.fuente === 'link_resena' && <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">Automática</span>}
+                      {r.fuente === 'solicitada' && <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">📋 Solicitada</span>}
+                      {r.fuente === 'manual' && <span className="text-[10px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded">Manual</span>}
                       {r.redirigido_google ? <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded">→ Google</span> : null}
                     </div>
                   </div>

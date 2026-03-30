@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getPartnerTickets, createPartnerTicket, getPartnerSatisfaccion, Ticket } from '../../api/api'
+import { getPartnerTickets, createPartnerTicket, getPartnerSatisfaccion, getActividades, Ticket } from '../../api/api'
 import { AlertTriangle, CheckCircle, Clock, Plus, X, Star, FileText, User, Activity } from 'lucide-react'
 
 const TIPOS = [
@@ -34,11 +34,20 @@ export default function PartnerTickets() {
   const [showDetail, setShowDetail] = useState<Ticket | null>(null)
   const [filterEstatus, setFilterEstatus] = useState('')
   const [tab, setTab] = useState<'tickets' | 'satisfaccion'>('tickets')
+  const [actividades, setActividades] = useState<string[]>([])
 
   const [form, setForm] = useState({
-    cliente: '', descripcion: '', tipo: 'queja', categoria: '',
+    cliente: '', descripcion: '', actividad: '', tipo: 'queja', categoria: '',
     whatsapp: '', email: ''
   })
+
+  useEffect(() => {
+    loadData()
+    // Load activities for the ticket form
+    getActividades().then(res => {
+      if (res.success) setActividades(res.data.filter(a => a.activa).map(a => a.nombre))
+    })
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -64,7 +73,7 @@ export default function PartnerTickets() {
     const res = await createPartnerTicket(form as any)
     if (res.success) {
       setShowCreate(false)
-      setForm({ cliente: '', descripcion: '', tipo: 'queja', categoria: '', whatsapp: '', email: '' })
+      setForm({ cliente: '', descripcion: '', actividad: '', tipo: 'queja', categoria: '', whatsapp: '', email: '' })
       loadData()
     }
   }
@@ -133,7 +142,6 @@ export default function PartnerTickets() {
               <span className="text-2xl font-bold text-gray-800">{resueltos}</span>
               <p className="text-xs text-gray-500">Resueltos</p>
             </div>
-            {/* Mini category breakdown */}
             {catData.length > 0 && (
               <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hidden md:block">
                 <p className="text-xs font-medium text-gray-500 mb-2">Por Categoría</p>
@@ -205,7 +213,6 @@ export default function PartnerTickets() {
       {/* Satisfaction Tab */}
       {tab === 'satisfaccion' && satisfaction && (
         <div className="space-y-4">
-          {/* General score */}
           <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm text-center">
             <p className="text-sm text-gray-500 mb-2">Score General de tus Tours</p>
             <div className="flex justify-center items-center gap-2">
@@ -221,7 +228,6 @@ export default function PartnerTickets() {
             </div>
             <p className="text-xs text-gray-400 mt-1">{satisfaction.general?.total || 0} reseñas totales</p>
 
-            {/* Star distribution visual */}
             {satisfaction.general?.total > 0 && satisfaction.scores?.length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <div className="flex justify-center gap-6">
@@ -245,7 +251,6 @@ export default function PartnerTickets() {
             )}
           </div>
 
-          {/* By tour */}
           {satisfaction.scores?.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-4 border-b border-gray-100">
@@ -276,7 +281,6 @@ export default function PartnerTickets() {
             </div>
           )}
 
-          {/* Recent reviews */}
           {satisfaction.recientes?.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="p-4 border-b border-gray-100">
@@ -292,6 +296,7 @@ export default function PartnerTickets() {
                         }`} />
                       ))}
                       <span className="text-xs text-gray-400 ml-2">{r.cliente} • {new Date(r.created_at).toLocaleDateString('es-PA')}</span>
+                      {r.fuente === 'solicitada' && <span className="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded">Solicitada</span>}
                     </div>
                     {r.comentario && <p className="text-sm text-gray-600 italic mt-1">"{r.comentario}"</p>}
                     {(r.score_guia || r.score_puntualidad || r.score_equipamiento) && (
@@ -310,7 +315,7 @@ export default function PartnerTickets() {
         </div>
       )}
 
-      {/* Create Modal — no tour selection for partner */}
+      {/* Create Modal — with actividad/tour type selector */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-10 px-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mb-10">
@@ -333,6 +338,15 @@ export default function PartnerTickets() {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="+507..." />
                 </div>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tour / Actividad *</label>
+                <select required value={form.actividad} onChange={e => setForm(f => ({ ...f, actividad: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                  <option value="">Seleccionar tour...</option>
+                  {actividades.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">Selecciona el tipo de tour relacionado a la incidencia</p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
@@ -354,9 +368,6 @@ export default function PartnerTickets() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descripción *</label>
                 <textarea required rows={4} value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" placeholder="Describe la incidencia con detalle..." />
-              </div>
-              <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
-                💡 Las mismas categorías de revisión aplican: seguridad, puntualidad, atención, equipo, comunicación, limpieza, precio.
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
@@ -384,7 +395,7 @@ export default function PartnerTickets() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-gray-500">Cliente:</span> <strong>{showDetail.cliente}</strong></div>
                 <div><span className="text-gray-500">Tipo:</span> {showDetail.tipo}</div>
-                {showDetail.actividad && <div><span className="text-gray-500">Tour:</span> {showDetail.actividad}</div>}
+                {showDetail.actividad && <div><span className="text-gray-500">Tour:</span> <strong className="text-blue-700">{showDetail.actividad}</strong></div>}
                 {showDetail.categoria && <div><span className="text-gray-500">Categoría:</span> {CATEGORIAS.find(c => c.value === showDetail.categoria)?.icon} {showDetail.categoria}</div>}
                 <div><span className="text-gray-500">Creado:</span> {new Date(showDetail.created_at).toLocaleDateString('es-PA')}</div>
                 {showDetail.asignado_a && <div><span className="text-gray-500">Asignado:</span> {showDetail.asignado_a}</div>}

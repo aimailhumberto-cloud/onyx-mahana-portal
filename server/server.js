@@ -4098,6 +4098,8 @@ app.post('/api/v1/public/resena/:codigo', (req, res) => {
     }
 
     const shouldRedirectGoogle = score_general >= 4;
+    const tipoSolicitud = req.body.tipo_solicitud || 'link_resena';
+    const fuente = tipoSolicitud === 'solicitada' ? 'solicitada' : 'link_resena';
 
     const review = create('satisfaccion_tours', {
       codigo_resena: codigo,
@@ -4112,7 +4114,7 @@ app.post('/api/v1/public/resena/:codigo', (req, res) => {
       score_equipamiento: score_equipamiento || null,
       score_valor: score_valor || null,
       comentario: comentario ? sanitize(comentario) : null,
-      fuente: 'link_resena',
+      fuente,
       redirigido_google: shouldRedirectGoogle ? 1 : 0
     });
 

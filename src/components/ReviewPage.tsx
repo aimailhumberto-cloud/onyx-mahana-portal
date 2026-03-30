@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { getPublicReview, submitPublicReview, ReviewData } from '../api/api'
 import { Star, Send, ExternalLink, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react'
 
@@ -41,6 +41,8 @@ function StarRating({ value, onChange, size = 'lg' }: { value: number; onChange:
 
 export default function ReviewPage() {
   const { codigo } = useParams<{ codigo: string }>()
+  const [searchParams] = useSearchParams()
+  const tipoSolicitud = searchParams.get('tipo') || 'link_resena'
   const [reviewData, setReviewData] = useState<ReviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -94,6 +96,7 @@ export default function ReviewPage() {
     if (scores.score_equipamiento > 0) data.score_equipamiento = scores.score_equipamiento
     if (scores.score_valor > 0) data.score_valor = scores.score_valor
     if (comentario.trim()) data.comentario = comentario.trim()
+    data.tipo_solicitud = tipoSolicitud
 
     const res = await submitPublicReview(codigo!, data)
     setSubmitting(false)
