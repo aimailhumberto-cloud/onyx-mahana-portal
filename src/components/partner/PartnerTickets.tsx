@@ -45,8 +45,12 @@ export default function PartnerTickets() {
     loadData()
     // Load activities for the ticket form
     getActividades().then(res => {
-      if (res.success) setActividades(res.data.filter(a => a.activa).map(a => a.nombre))
-    })
+      if (res.success && res.data) {
+        const activas = res.data.filter(a => a.activa)
+        // If filter returns empty, show all (activa field might not be set)
+        setActividades(activas.length > 0 ? activas.map(a => a.nombre) : res.data.map(a => a.nombre))
+      }
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
