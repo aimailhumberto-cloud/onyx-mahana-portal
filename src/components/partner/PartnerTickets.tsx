@@ -36,7 +36,7 @@ export default function PartnerTickets() {
   const [tab, setTab] = useState<'tickets' | 'satisfaccion'>('tickets')
 
   const [form, setForm] = useState({
-    cliente: '', descripcion: '', actividad: '', tipo: 'queja', categoria: '',
+    cliente: '', descripcion: '', tipo: 'queja', categoria: '',
     whatsapp: '', email: ''
   })
 
@@ -64,7 +64,7 @@ export default function PartnerTickets() {
     const res = await createPartnerTicket(form as any)
     if (res.success) {
       setShowCreate(false)
-      setForm({ cliente: '', descripcion: '', actividad: '', tipo: 'queja', categoria: '', whatsapp: '', email: '' })
+      setForm({ cliente: '', descripcion: '', tipo: 'queja', categoria: '', whatsapp: '', email: '' })
       loadData()
     }
   }
@@ -72,6 +72,14 @@ export default function PartnerTickets() {
   const abiertos = tickets.filter(t => t.estatus === 'Abierto').length
   const enProceso = tickets.filter(t => t.estatus === 'En Proceso').length
   const resueltos = tickets.filter(t => t.estatus === 'Resuelto' || t.estatus === 'Cerrado').length
+
+  // Category distribution for mini chart
+  const catDistrib = tickets.reduce<Record<string, number>>((acc, t) => {
+    const cat = t.categoria || 'otro'
+    acc[cat] = (acc[cat] || 0) + 1
+    return acc
+  }, {})
+  const catData = Object.entries(catDistrib).sort((a, b) => b[1] - a[1])
 
   return (
     <div className="space-y-6">
@@ -108,8 +116,8 @@ export default function PartnerTickets() {
       {/* Tickets Tab */}
       {tab === 'tickets' && (
         <>
-          {/* KPIs */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* KPIs + mini category chart */}
+          <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
             <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm text-center">
               <AlertTriangle className="w-5 h-5 text-red-500 mx-auto mb-1" />
               <span className="text-2xl font-bold text-gray-800">{abiertos}</span>
@@ -125,6 +133,27 @@ export default function PartnerTickets() {
               <span className="text-2xl font-bold text-gray-800">{resueltos}</span>
               <p className="text-xs text-gray-500">Resueltos</p>
             </div>
+            {/* Mini category breakdown */}
+            {catData.length > 0 && (
+              <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hidden md:block">
+                <p className="text-xs font-medium text-gray-500 mb-2">Por Categoría</p>
+                <div className="space-y-1">
+                  {catData.slice(0, 3).map(([cat, count]) => {
+                    const catInfo = CATEGORIAS.find(c => c.value === cat)
+                    const max = catData[0][1]
+                    return (
+                      <div key={cat} className="flex items-center gap-1.5">
+                        <span className="text-xs w-4">{catInfo?.icon || '📝'}</span>
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div className="h-full bg-blue-400 rounded-full" style={{ width: `${(count / max) * 100}%` }} />
+                        </div>
+                        <span className="text-xs font-bold text-gray-600 w-4 text-right">{count}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Filter */}
@@ -156,7 +185,9 @@ export default function PartnerTickets() {
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="font-mono text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{t.codigo}</span>
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ESTATUS_COLORS[t.estatus] || ''}`}>{t.estatus}</span>
-                    {t.categoria && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.categoria}</span>}
+                    {t.categoria && <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                      {CATEGORIAS.find(c => c.value === t.categoria)?.icon} {t.categoria}
+                    </span>}
                   </div>
                   <p className="text-sm text-gray-800 font-medium truncate">{t.descripcion}</p>
                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
@@ -189,6 +220,29 @@ export default function PartnerTickets() {
               )}
             </div>
             <p className="text-xs text-gray-400 mt-1">{satisfaction.general?.total || 0} reseñas totales</p>
+
+            {/* Star distribution visual */}
+            {satisfaction.general?.total > 0 && satisfaction.scores?.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="flex justify-center gap-6">
+                  {satisfaction.scores.map((s: any, i: number) => {
+                    const score = s.avg_general || 0
+                    const barH = (score / 5) * 100
+                    const color = score >= 4 ? 'bg-green-500' : score >= 3 ? 'bg-yellow-500' : 'bg-red-500'
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-1">
+                        <span className="text-xs font-bold text-gray-700">{score}</span>
+                        <div className="w-8 h-20 bg-gray-100 rounded-md relative overflow-hidden">
+                          <div className={`absolute bottom-0 left-0 right-0 ${color} rounded-md transition-all`}
+                            style={{ height: `${barH}%` }} />
+                        </div>
+                        <span className="text-[10px] text-gray-400 text-center max-w-[60px] truncate">{s.nombre}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* By tour */}
@@ -202,7 +256,11 @@ export default function PartnerTickets() {
                   <div key={i} className="p-4 flex items-center gap-4">
                     <div className="flex-1">
                       <p className="font-medium text-gray-800 text-sm">{s.nombre}</p>
-                      <p className="text-xs text-gray-400">{s.total} reseñas</p>
+                      <div className="flex gap-3 text-xs text-gray-400 mt-0.5">
+                        <span>{s.total} reseñas</span>
+                        {s.avg_guia && <span>Guía: {s.avg_guia}</span>}
+                        {s.avg_puntualidad && <span>Puntualidad: {s.avg_puntualidad}</span>}
+                      </div>
                     </div>
                     <div className="flex items-center gap-1">
                       {[1, 2, 3, 4, 5].map(star => (
@@ -236,6 +294,14 @@ export default function PartnerTickets() {
                       <span className="text-xs text-gray-400 ml-2">{r.cliente} • {new Date(r.created_at).toLocaleDateString('es-PA')}</span>
                     </div>
                     {r.comentario && <p className="text-sm text-gray-600 italic mt-1">"{r.comentario}"</p>}
+                    {(r.score_guia || r.score_puntualidad || r.score_equipamiento) && (
+                      <div className="flex gap-3 mt-2 text-xs text-gray-400">
+                        {r.score_guia && <span>🧑‍🏫 Guía: <b className="text-gray-600">{r.score_guia}/5</b></span>}
+                        {r.score_puntualidad && <span>⏰ Puntualidad: <b className="text-gray-600">{r.score_puntualidad}/5</b></span>}
+                        {r.score_equipamiento && <span>🛶 Equipo: <b className="text-gray-600">{r.score_equipamiento}/5</b></span>}
+                        {r.score_valor && <span>💰 Valor: <b className="text-gray-600">{r.score_valor}/5</b></span>}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -244,7 +310,7 @@ export default function PartnerTickets() {
         </div>
       )}
 
-      {/* Create Modal */}
+      {/* Create Modal — no tour selection for partner */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-10 px-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mb-10">
@@ -255,10 +321,17 @@ export default function PartnerTickets() {
               </button>
             </div>
             <form onSubmit={handleCreate} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
-                <input type="text" required value={form.cliente} onChange={e => setForm(f => ({ ...f, cliente: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nombre del cliente" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
+                  <input type="text" required value={form.cliente} onChange={e => setForm(f => ({ ...f, cliente: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="Nombre del cliente" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+                  <input type="text" value={form.whatsapp} onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" placeholder="+507..." />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -269,8 +342,8 @@ export default function PartnerTickets() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                  <select value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
+                  <select required value={form.categoria} onChange={e => setForm(f => ({ ...f, categoria: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
                     <option value="">Seleccionar...</option>
                     {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
@@ -280,7 +353,10 @@ export default function PartnerTickets() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Descripción *</label>
                 <textarea required rows={4} value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" placeholder="Describe la incidencia..." />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" placeholder="Describe la incidencia con detalle..." />
+              </div>
+              <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
+                💡 Las mismas categorías de revisión aplican: seguridad, puntualidad, atención, equipo, comunicación, limpieza, precio.
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
@@ -309,7 +385,7 @@ export default function PartnerTickets() {
                 <div><span className="text-gray-500">Cliente:</span> <strong>{showDetail.cliente}</strong></div>
                 <div><span className="text-gray-500">Tipo:</span> {showDetail.tipo}</div>
                 {showDetail.actividad && <div><span className="text-gray-500">Tour:</span> {showDetail.actividad}</div>}
-                {showDetail.categoria && <div><span className="text-gray-500">Categoría:</span> {showDetail.categoria}</div>}
+                {showDetail.categoria && <div><span className="text-gray-500">Categoría:</span> {CATEGORIAS.find(c => c.value === showDetail.categoria)?.icon} {showDetail.categoria}</div>}
                 <div><span className="text-gray-500">Creado:</span> {new Date(showDetail.created_at).toLocaleDateString('es-PA')}</div>
                 {showDetail.asignado_a && <div><span className="text-gray-500">Asignado:</span> {showDetail.asignado_a}</div>}
               </div>

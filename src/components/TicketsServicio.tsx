@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { getTickets, getTicketStats, createTicket, updateTicketStatus, assignTicket, updateTicket, getActividades, getStaff, Ticket, TicketStats } from '../api/api'
-import { AlertTriangle, CheckCircle, Clock, Plus, X, Search, User, Tag, Activity, RefreshCw, FileText } from 'lucide-react'
+import { getTickets, getTicketStats, createTicket, updateTicketStatus, assignTicket, updateTicket, getActividades, getUsuarios, Ticket, TicketStats, Usuario } from '../api/api'
+import { AlertTriangle, CheckCircle, Clock, Plus, X, Search, User, Tag, Activity, RefreshCw, FileText, BarChart3 } from 'lucide-react'
 
 const TIPOS = [
   { value: 'queja', label: 'Queja', icon: '😤' },
@@ -34,6 +34,9 @@ const ESTATUS = [
   { value: 'Cerrado', color: 'bg-gray-100 text-gray-700', dot: 'bg-gray-400' },
 ]
 
+const CAT_COLORS = ['#3b82f6', '#ef4444', '#f59e0b', '#10b981', '#8b5cf6', '#ec4899', '#06b6d4', '#6b7280']
+const PRIO_COLORS: Record<string, string> = { critica: '#ef4444', alta: '#f97316', media: '#eab308', baja: '#9ca3af' }
+
 function PrioTag({ prioridad }: { prioridad: string }) {
   const p = PRIORIDADES.find(pr => pr.value === prioridad) || PRIORIDADES[2]
   return (
@@ -54,15 +57,106 @@ function StatusBadge({ estatus }: { estatus: string }) {
   )
 }
 
+// Donut chart component
+function DonutChart({ data, colors, title }: { data: { label: string; value: number }[]; colors: string[]; title: string }) {
+  const total = data.reduce((s, d) => s + d.value, 0)
+  if (total === 0) return <div className="text-center text-gray-400 text-sm py-8">Sin datos</div>
+  
+  let cumulative = 0
+  const segments = data.map((d, i) => {
+    const pct = (d.value / total) * 100
+    const offset = cumulative
+    cumulative += pct
+    return { ...d, pct, offset, color: colors[i % colors.length] }
+  })
+
+  const gradientParts = segments.map(s => `${s.color} ${s.offset}% ${s.offset + s.pct}%`).join(', ')
+
+  return (
+    <div className="text-center">
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">{title}</h4>
+      <div className="relative w-32 h-32 mx-auto mb-3">
+        <div className="w-full h-full rounded-full" style={{ background: `conic-gradient(${gradientParts})` }} />
+        <div className="absolute inset-3 bg-white rounded-full flex items-center justify-center">
+          <span className="text-xl font-bold text-gray-800">{total}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+        {segments.map((s, i) => (
+          <div key={i} className="flex items-center gap-1 text-xs text-gray-600">
+            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+            {s.label} ({s.value})
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Horizontal bar chart
+function HBarChart({ data, title }: { data: { label: string; value: number }[]; title: string }) {
+  const max = Math.max(...data.map(d => d.value), 1)
+  if (data.length === 0) return null
+  return (
+    <div>
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">{title}</h4>
+      <div className="space-y-2">
+        {data.slice(0, 8).map((d, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <span className="text-xs text-gray-600 w-32 truncate flex-shrink-0" title={d.label}>{d.label}</span>
+            <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500"
+                style={{ width: `${(d.value / max) * 100}%` }} />
+            </div>
+            <span className="text-xs font-bold text-gray-700 w-6 text-right">{d.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// Trend line chart
+function TrendChart({ data }: { data: { mes: string; total: number; resueltos: number }[] }) {
+  if (!data || data.length === 0) return null
+  const maxVal = Math.max(...data.map(d => d.total), 1)
+  return (
+    <div>
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">📈 Tendencia Mensual</h4>
+      <div className="flex items-end gap-1.5 h-28">
+        {data.map((d, i) => {
+          const totalH = (d.total / maxVal) * 100
+          const resolvedH = (d.resueltos / maxVal) * 100
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+              <span className="text-[10px] font-bold text-gray-600">{d.total}</span>
+              <div className="w-full relative" style={{ height: '80px' }}>
+                <div className="absolute bottom-0 left-0 right-0 bg-blue-100 rounded-t-md transition-all" style={{ height: `${totalH}%` }} />
+                <div className="absolute bottom-0 left-[15%] right-[15%] bg-green-500 rounded-t-md transition-all" style={{ height: `${resolvedH}%` }} />
+              </div>
+              <span className="text-[9px] text-gray-400">{d.mes?.substring(5)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div className="flex justify-center gap-4 mt-2 text-[10px] text-gray-500">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-100" /> Total</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-green-500" /> Resueltos</span>
+      </div>
+    </div>
+  )
+}
+
 export default function TicketsServicio() {
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [stats, setStats] = useState<TicketStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [showDetail, setShowDetail] = useState<Ticket | null>(null)
+  const [showCharts, setShowCharts] = useState(false)
   const [filters, setFilters] = useState({ estatus: '', categoria: '', prioridad: '', search: '' })
   const [actividades, setActividades] = useState<string[]>([])
-  const [staffList, setStaffList] = useState<string[]>([])
+  const [usersList, setUsersList] = useState<Usuario[]>([])
 
   // Create form
   const [form, setForm] = useState({
@@ -109,9 +203,9 @@ export default function TicketsServicio() {
   }
 
   async function loadCatalogs() {
-    const [actRes, staffRes] = await Promise.all([getActividades(), getStaff()])
+    const [actRes, usersRes] = await Promise.all([getActividades(), getUsuarios()])
     if (actRes.success) setActividades(actRes.data.filter(a => a.activa).map(a => a.nombre))
-    if (staffRes.success) setStaffList(staffRes.data.filter(s => s.activo).map(s => s.nombre))
+    if (usersRes.success) setUsersList(usersRes.data.filter(u => u.activo))
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -161,6 +255,9 @@ export default function TicketsServicio() {
     return `Hace ${days}d`
   }
 
+  // Active Mahana users (admin + vendedor) for assignment
+  const assignableUsers = usersList.filter(u => u.rol === 'admin' || u.rol === 'vendedor')
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -169,12 +266,22 @@ export default function TicketsServicio() {
           <h1 className="text-2xl font-bold text-gray-800">🎫 Tickets de Servicio</h1>
           <p className="text-sm text-gray-500">Gestión de quejas, incidencias y mejora continua</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 transition-all hover:scale-105"
-        >
-          <Plus className="w-4 h-4" /> Nuevo Ticket
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowCharts(!showCharts)}
+            className={`px-3 py-2.5 rounded-xl font-medium flex items-center gap-2 text-sm border transition-all ${
+              showCharts ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" /> Gráficas
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 transition-all hover:scale-105"
+          >
+            <Plus className="w-4 h-4" /> Nuevo Ticket
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -217,6 +324,37 @@ export default function TicketsServicio() {
             </div>
             <span className="text-2xl font-bold text-gray-800">{stats.recurrentes?.length || 0}</span>
           </div>
+        </div>
+      )}
+
+      {/* Charts section */}
+      {showCharts && stats && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+            <DonutChart
+              title="Por Categoría"
+              data={(stats.porCategoria || []).map(c => ({ label: c.categoria || 'Sin cat.', value: c.count }))}
+              colors={CAT_COLORS}
+            />
+          </div>
+          <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+            <DonutChart
+              title="Por Prioridad"
+              data={(stats.porPrioridad || []).map(p => ({ label: p.prioridad, value: p.count }))}
+              colors={(stats.porPrioridad || []).map(p => PRIO_COLORS[p.prioridad] || '#9ca3af')}
+            />
+          </div>
+          <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+            <HBarChart
+              title="Top Tours con Tickets"
+              data={(stats.porActividad || []).map(a => ({ label: a.actividad || 'Sin tour', value: a.count }))}
+            />
+          </div>
+          {stats.tendencia && stats.tendencia.length > 1 && (
+            <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm md:col-span-3">
+              <TrendChart data={stats.tendencia} />
+            </div>
+          )}
         </div>
       )}
 
@@ -378,7 +516,7 @@ export default function TicketsServicio() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Actividad</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Actividad / Tour</label>
                   <select value={form.actividad} onChange={e => setForm(f => ({ ...f, actividad: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
                     <option value="">Sin actividad</option>
@@ -394,6 +532,7 @@ export default function TicketsServicio() {
                     <option value="telefono">Teléfono</option>
                     <option value="email">Email</option>
                     <option value="social">Redes Sociales</option>
+                    <option value="partner-portal">Partner Portal</option>
                   </select>
                 </div>
               </div>
@@ -463,14 +602,21 @@ export default function TicketsServicio() {
 
               {/* Actions */}
               <div className="border-t border-gray-100 pt-4 space-y-3">
-                {/* Assign */}
-                {!showDetail.asignado_a && showDetail.estatus !== 'Cerrado' && (
+                {/* Re-assign or assign */}
+                {showDetail.estatus !== 'Cerrado' && (
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">Asignar a:</span>
-                    <select onChange={e => { if (e.target.value) handleAssign(showDetail.id, e.target.value) }}
-                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm flex-1">
-                      <option value="">Seleccionar...</option>
-                      {staffList.map(s => <option key={s} value={s}>{s}</option>)}
+                    <span className="text-sm text-gray-500">{showDetail.asignado_a ? 'Re-asignar a:' : 'Asignar a:'}</span>
+                    <select
+                      defaultValue=""
+                      onChange={e => { if (e.target.value) handleAssign(showDetail.id, e.target.value) }}
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm flex-1"
+                    >
+                      <option value="">Seleccionar usuario...</option>
+                      {assignableUsers.map(u => (
+                        <option key={u.id} value={u.nombre}>
+                          {u.nombre} ({u.rol === 'admin' ? 'Admin' : 'Vendedor'})
+                        </option>
+                      ))}
                     </select>
                   </div>
                 )}
