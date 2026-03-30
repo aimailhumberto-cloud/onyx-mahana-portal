@@ -442,9 +442,24 @@ export async function getDisponibilidadSemana(desde: string): Promise<ApiRespons
   }
 }
 
+export async function getDisponibilidadMes(mes: string, actividad_id?: number): Promise<ApiResponse<any>> {
+  try {
+    const params: Record<string, string> = { mes }
+    if (actividad_id) params.actividad_id = String(actividad_id)
+    const response = await api.get('/disponibilidad/mes', { params })
+    return response.data
+  } catch (err) {
+    return { success: false, data: null, error: { code: 'NETWORK', message: 'Error de conexión' } }
+  }
+}
+
 export async function createSlot(data: Partial<Slot>): Promise<ApiResponse<Slot>> {
-  const response = await api.post('/slots', data)
-  return response.data
+  try {
+    const response = await api.post('/slots', data)
+    return response.data
+  } catch (err: any) {
+    return { success: false, data: null as any, error: { code: 'NETWORK', message: err.response?.data?.error?.message || 'Error de conexión' } }
+  }
 }
 
 export async function updateSlot(id: number, data: Partial<Slot>): Promise<ApiResponse<Slot>> {

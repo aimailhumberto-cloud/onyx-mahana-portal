@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  getActividades, getDisponibilidad,
+  getActividades, getDisponibilidadMes,
   createSlot, updateSlot, deleteSlot,
   getPlantillas, createPlantilla, deletePlantilla,
-  generarSlotsMes, getBloqueos, createBloqueo, deleteBloqueo
+  generarSlotsMes, createBloqueo, deleteBloqueo
 } from '../api/api'
 import type { Actividad, Slot, Plantilla, Bloqueo } from '../api/api'
 import {
@@ -120,35 +120,22 @@ export default function DisponibilidadAdmin() {
 
   const loadMonthData = useCallback(async () => {
     if (!selectedActId) return
-    const desde = `${monthStr}-01`
-    const hasta = `${monthStr}-${String(daysInMonth).padStart(2, '0')}`
 
-    // Auto-generate slots from plantillas
+    // Auto-generate slots from plantillas (fire and forget, non-blocking)
     try {
-      await fetch('/api/v1/slots/auto-generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('mahana_token')}`
-        },
-        body: JSON.stringify({ desde, hasta, actividad_id: selectedActId })
-      })
+      await generarSlotsMes({ mes: monthStr, actividad_id: selectedActId })
     } catch {}
 
-    // Load slots for the month (fetch each day)
-    const promises: Promise<any>[] = []
-    for (let d = 1; d <= daysInMonth; d++) {
-      const fecha = `${monthStr}-${String(d).padStart(2, '0')}`
-      promises.push(getDisponibilidad({ fecha }))
+    // Load ALL slots for the month in ONE call
+    const mesRes = await getDisponibilidadMes(monthStr, selectedActId)
+    if (mesRes.success && mesRes.data) {
+      setSlots(mesRes.data.slots || [])
+      setBloqueos(mesRes.data.bloqueos || [])
+    } else {
+      // Fallback: at least clear stale data
+      setSlots([])
+      setBloqueos([])
     }
-    const results = await Promise.all(promises)
-    const allSlots: Slot[] = []
-    results.forEach(r => { if (r.success) allSlots.push(...r.data) })
-    setSlots(allSlots)
-
-    // Load bloqueos
-    const blRes = await getBloqueos({ desde, hasta })
-    if (blRes.success) setBloqueos(blRes.data)
 
     // Load plantillas
     const plRes = await getPlantillas()
