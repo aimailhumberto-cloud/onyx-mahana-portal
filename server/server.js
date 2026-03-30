@@ -2827,12 +2827,51 @@ app.get('/api/v1/public/disponibilidad/:slug', publicRateLimit(60), (req, res) =
     const desde = `${mes}-01`;
     const hasta = `${mes}-${String(daysInMonth).padStart(2, '0')}`;
     
+    // ── Auto-generate slots from plantillas if none exist for this month ──
+    try {
+      const existingCount = db.prepare(
+        'SELECT COUNT(*) as c FROM horarios_slots WHERE actividad_id = ? AND fecha >= ? AND fecha <= ?'
+      ).get(producto.id, desde, hasta);
+      
+      if (existingCount.c === 0) {
+        const plantillas = db.prepare(
+          'SELECT * FROM plantillas_horario WHERE activa = 1 AND actividad_id = ?'
+        ).all(producto.id);
+        
+        if (plantillas.length > 0) {
+          const bloqueosPre = db.prepare(
+            'SELECT actividad_id, fecha FROM bloqueos_fechas WHERE fecha >= ? AND fecha <= ?'
+          ).all(desde, hasta);
+          const bloqueosPreSet = new Set(bloqueosPre.map(b => `${b.actividad_id || 'all'}-${b.fecha}`));
+          
+          const insertStmt = db.prepare(
+            'INSERT OR IGNORE INTO horarios_slots (actividad_id, fecha, hora, capacidad, reservados, bloqueado) VALUES (?, ?, ?, ?, 0, 0)'
+          );
+          const txn = db.transaction(() => {
+            for (let day = 1; day <= daysInMonth; day++) {
+              const date = new Date(year, month - 1, day);
+              const dayOfWeek = date.getDay();
+              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+              for (const p of plantillas) {
+                if (p.dia_semana === dayOfWeek) {
+                  if (bloqueosPreSet.has(`${p.actividad_id}-${dateStr}`) || bloqueosPreSet.has(`all-${dateStr}`)) continue;
+                  insertStmt.run(p.actividad_id, dateStr, p.hora, p.capacidad);
+                }
+              }
+            }
+          });
+          txn();
+        }
+      }
+    } catch (genErr) {
+      console.error('Auto-generate in public endpoint (non-fatal):', genErr.message);
+    }
+    
     // Get booking config for min anticipation
     const anticipacionRow = db.prepare("SELECT valor FROM reservas_config WHERE clave = 'anticipacion_min_horas'").get();
     const anticipacionHoras = parseInt(anticipacionRow?.valor || '24');
     const ahora = new Date();
     const minDate = new Date(ahora.getTime() + anticipacionHoras * 60 * 60 * 1000);
-    const minDateStr = minDate.toISOString().split('T')[0];
     
     // Get slots + bloqueos
     const slots = db.prepare(`
@@ -2854,23 +2893,23 @@ app.get('/api/v1/public/disponibilidad/:slug', publicRateLimit(60), (req, res) =
       const dateStr = `${mes}-${String(d).padStart(2, '0')}`;
       const daySlots = slots.filter(s => s.fecha === dateStr && !s.bloqueado);
       
-      // Time-level anticipation filtering (match /slots endpoint behavior)
-      const availableSlots = daySlots.filter(s => {
-        const slotTime = new Date(`${dateStr}T${s.hora}:00`);
-        return slotTime > minDate && (s.capacidad - s.reservados) > 0;
+      // Use explicit local date comparison to avoid timezone drift
+      const available = daySlots.filter(s => {
+        const slotDatetime = new Date(`${dateStr}T${s.hora}:00`);
+        return slotDatetime > minDate && (s.capacidad - s.reservados) > 0;
       });
       
-      const disponibles = availableSlots.reduce((sum, s) => sum + (s.capacidad - s.reservados), 0);
+      const disponibles = available.reduce((sum, s) => sum + (s.capacidad - s.reservados), 0);
       const bloqueado = bloqueosSet.has(dateStr);
-      const pasado = dateStr < minDateStr;
+      const isPast = dateStr < ahora.toISOString().split('T')[0];
       
       let estado = 'sin_slots';
       if (bloqueado) estado = 'bloqueado';
-      else if (pasado) estado = 'pasado';
+      else if (isPast) estado = 'pasado';
       else if (disponibles > 0) estado = 'disponible';
       else if (daySlots.length > 0) estado = 'lleno';
       
-      dias[dateStr] = { estado, disponibles: Math.max(disponibles, 0), total_slots: availableSlots.length };
+      dias[dateStr] = { estado, disponibles: Math.max(disponibles, 0), total_slots: available.length };
     }
     
     success(res, { producto: producto.nombre, mes, dias });
