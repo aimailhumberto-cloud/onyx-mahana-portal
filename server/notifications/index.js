@@ -48,39 +48,45 @@ async function onTourCreated(tour) {
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
+  const isPartnerTour = tour.estatus === 'Por Aprobar' || tour.fuente === 'partner-portal';
   
-  // Email confirmation to client
   if (emailEnabled) {
-    try {
-      results.email_client = await email.sendConfirmacion(tour, cc || undefined);
-    } catch (err) {
-      console.error('🔔 Notification error (email/create):', err.message);
-      results.email_client = { success: false, error: err.message };
-    }
-  }
-
-  // Email to partner (solicitud recibida)
-  if (emailEnabled && tour.vendedor) {
-    try {
-      const partnerEmail = getPartnerEmail(tour.vendedor);
-      if (partnerEmail) {
-        results.email_partner = await email.sendPartnerSolicitudRecibida(tour, partnerEmail);
+    if (isPartnerTour) {
+      // ── Partner-submitted tour: do NOT email client (not confirmed yet) ──
+      // Only notify partner (solicitud recibida) + admin (tour por aprobar)
+      
+      // Partner: "Tu solicitud fue recibida"
+      if (tour.vendedor) {
+        try {
+          const partnerEmail = getPartnerEmail(tour.vendedor);
+          if (partnerEmail) {
+            results.email_partner = await email.sendPartnerSolicitudRecibida(tour, partnerEmail);
+          }
+        } catch (err) {
+          console.error('🔔 Notification error (email/partner-create):', err.message);
+        }
       }
-    } catch (err) {
-      console.error('🔔 Notification error (email/partner-create):', err.message);
+
+      // Admin: "Nuevo tour por aprobar"
+      if (cc && tour.vendedor) {
+        try {
+          results.email_admin = await email.sendAdminNuevoTour(tour, cc);
+        } catch (err) {
+          console.error('🔔 Notification error (email/admin-create):', err.message);
+        }
+      }
+    } else {
+      // ── Admin/vendedor-created tour: email client with confirmation ──
+      try {
+        results.email_client = await email.sendConfirmacion(tour, cc || undefined);
+      } catch (err) {
+        console.error('🔔 Notification error (email/create):', err.message);
+        results.email_client = { success: false, error: err.message };
+      }
     }
   }
 
-  // Email to admin (nuevo tour por aprobar)
-  if (emailEnabled && cc && tour.vendedor) {
-    try {
-      results.email_admin = await email.sendAdminNuevoTour(tour, cc);
-    } catch (err) {
-      console.error('🔔 Notification error (email/admin-create):', err.message);
-    }
-  }
-
-  // WhatsApp to team/owner
+  // WhatsApp to team/owner (always)
   if (waNumber) {
     try {
       results.whatsapp = await whatsapp.sendWhatsApp(waNumber, whatsapp.formatNewTour(tour));
@@ -90,7 +96,7 @@ async function onTourCreated(tour) {
     }
   }
 
-  // Telegram to group/agent
+  // Telegram to group/agent (always)
   if (tgChatId) {
     try {
       results.telegram = await telegram.sendTelegram(tgChatId, telegram.formatNewTour(tour));
@@ -100,7 +106,7 @@ async function onTourCreated(tour) {
     }
   }
 
-  console.log(`🔔 Notifications for tour #${tour.id}:`, JSON.stringify(results));
+  console.log(`🔔 Notifications for tour #${tour.id} (${tour.estatus}):`, JSON.stringify(results));
   return results;
 }
 
@@ -111,25 +117,25 @@ async function onTourApproved(tour) {
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
   
-  // Email confirmation to client
   if (emailEnabled) {
+    // Client: "Reserva Confirmada" — first time they hear about it
     try {
       results.email_client = await email.sendConfirmacion(tour, cc || undefined);
     } catch (err) {
-      console.error('🔔 Notification error (email/approve):', err.message);
+      console.error('🔔 Notification error (email/approve-client):', err.message);
       results.email_client = { success: false, error: err.message };
     }
-  }
 
-  // Email to partner (tour aprobado)
-  if (emailEnabled && tour.vendedor) {
-    try {
-      const partnerEmail = getPartnerEmail(tour.vendedor);
-      if (partnerEmail) {
-        results.email_partner = await email.sendPartnerAprobado(tour, partnerEmail);
+    // Partner: "Tour aprobado"
+    if (tour.vendedor) {
+      try {
+        const partnerEmail = getPartnerEmail(tour.vendedor);
+        if (partnerEmail) {
+          results.email_partner = await email.sendPartnerAprobado(tour, partnerEmail);
+        }
+      } catch (err) {
+        console.error('🔔 Notification error (email/partner-approve):', err.message);
       }
-    } catch (err) {
-      console.error('🔔 Notification error (email/partner-approve):', err.message);
     }
   }
 
@@ -162,7 +168,7 @@ async function onTourRejected(tour, motivo) {
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
 
-  // Email to partner (tour rechazado)
+  // Partner only — client was never notified, so no need to email them
   if (emailEnabled && tour.vendedor) {
     try {
       const partnerEmail = getPartnerEmail(tour.vendedor);
@@ -192,26 +198,30 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
   const results = {};
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+  const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
   
-  // Email on important status changes (to client)
-  if (['Pagado', 'Aprobado', 'Reservado'].includes(newStatus) && tour.email) {
+  // ── Email to CLIENT only on meaningful status changes ──
+  // Skip 'Aprobado' here — already handled by onTourApproved to avoid duplicates
+  // 'Reservado' = booking confirmed, 'Pagado' = payment received, 'Cerrado' = tour completed
+  if (emailEnabled && ['Pagado', 'Reservado', 'Cerrado'].includes(newStatus) && tour.email) {
     try {
-      const statusEmoji = { 'Pagado': '💰', 'Aprobado': '✅', 'Reservado': '📋' };
-      results.email = await email.sendEmail(
+      const statusEmoji = { 'Pagado': '💰', 'Reservado': '📋', 'Cerrado': '✅' };
+      const statusMsg = { 'Pagado': 'Pago Recibido', 'Reservado': 'Reserva Confirmada', 'Cerrado': 'Tour Completado' };
+      results.email_client = await email.sendEmail(
         tour.email,
-        `${statusEmoji[newStatus] || '🔄'} ${newStatus} — ${tour.actividad_nombre || tour.actividad || 'Tour'} | Mahana Tours`,
+        `${statusEmoji[newStatus] || '🔄'} ${statusMsg[newStatus] || newStatus} — ${tour.actividad_nombre || tour.actividad || 'Tour'} | Mahana Tours`,
         email.confirmacionTemplate(tour)
       );
     } catch (err) {
-      results.email = { success: false, error: err.message };
+      results.email_client = { success: false, error: err.message };
     }
   }
 
-  // Email to admin on any status change
+  // ── Email to ADMIN on any status change (internal tracking) ──
   const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
-  if (cc && (isEnabled('email') || process.env.SMTP_PASS)) {
+  if (cc && emailEnabled) {
     try {
-      const statusEmoji = { 'Pagado': '💰', 'Aprobado': '✅', 'Reservado': '📋', 'Cancelado': '❌', 'Rechazado': '🚫' };
+      const statusEmoji = { 'Pagado': '💰', 'Aprobado': '✅', 'Reservado': '📋', 'Cancelado': '❌', 'Rechazado': '🚫', 'Cerrado': '🏁' };
       await email.sendEmail(
         cc,
         `${statusEmoji[newStatus] || '🔄'} Tour ${oldStatus} → ${newStatus}: ${tour.cliente || ''} — ${tour.actividad || ''}`,
