@@ -117,16 +117,32 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   
-  // Email on Pagado
-  if (newStatus === 'Pagado' && tour.email) {
+  // Email on important status changes (to client)
+  if (['Pagado', 'Aprobado', 'Reservado'].includes(newStatus) && tour.email) {
     try {
+      const statusEmoji = { 'Pagado': '💰', 'Aprobado': '✅', 'Reservado': '📋' };
       results.email = await email.sendEmail(
         tour.email,
-        `💰 Pago Confirmado — ${tour.actividad_nombre || 'Tour'} | Mahana Tours`,
-        email.confirmacionTemplate({ ...tour, _paymentConfirmed: true })
+        `${statusEmoji[newStatus] || '🔄'} ${newStatus} — ${tour.actividad_nombre || tour.actividad || 'Tour'} | Mahana Tours`,
+        email.confirmacionTemplate(tour)
       );
     } catch (err) {
       results.email = { success: false, error: err.message };
+    }
+  }
+
+  // Email to admin on any status change
+  const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+  if (cc && (isEnabled('email') || process.env.SMTP_PASS)) {
+    try {
+      const statusEmoji = { 'Pagado': '💰', 'Aprobado': '✅', 'Reservado': '📋', 'Cancelado': '❌', 'Rechazado': '🚫' };
+      await email.sendEmail(
+        cc,
+        `${statusEmoji[newStatus] || '🔄'} Tour ${oldStatus} → ${newStatus}: ${tour.cliente || ''} — ${tour.actividad || ''}`,
+        email.confirmacionTemplate(tour)
+      );
+    } catch (err) {
+      console.error('🔔 Admin CC email failed:', err.message);
     }
   }
 

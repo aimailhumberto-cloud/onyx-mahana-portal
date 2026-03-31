@@ -480,6 +480,70 @@ app.patch('/api/v1/tours/:id/status', requireAuth, requireRole('admin', 'vendedo
   }
 });
 
+// Approve tour (admin only)
+app.post('/api/v1/tours/:id/aprobar', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const existing = findById('reservas_tours', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
+
+    const updated = update('reservas_tours', req.params.id, { estatus: 'Aprobado' });
+    success(res, updated);
+
+    // Notify: email to client + telegram + admin
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...existing, ...updated, email: existing.email_cliente };
+        await notifications.onTourApproved(fullTour);
+      } catch (err) {
+        console.error('🔔 Notification error (tour approve):', err.message);
+      }
+    });
+  } catch (err) {
+    console.error('Error approving tour:', err);
+    error(res, 'SERVER_ERROR', 'Error approving tour', 500);
+  }
+});
+
+// Reject tour (admin only)
+app.post('/api/v1/tours/:id/rechazar', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const existing = findById('reservas_tours', req.params.id);
+    if (!existing) return error(res, 'NOT_FOUND', `Tour ${req.params.id} not found`, 404);
+
+    const { motivo } = req.body;
+    const updated = update('reservas_tours', req.params.id, {
+      estatus: 'Rechazado',
+      notas_admin: motivo ? `RECHAZADO: ${motivo}` : 'Rechazado por admin',
+    });
+
+    // Release slot if linked
+    if (existing.slot_id) {
+      try {
+        const db = getDb();
+        const pax = existing.pax || 1;
+        db.prepare('UPDATE horarios_slots SET reservados = MAX(reservados - ?, 0) WHERE id = ?').run(pax, existing.slot_id);
+      } catch (slotErr) {
+        console.error('Error releasing slot:', slotErr.message);
+      }
+    }
+
+    success(res, updated);
+
+    // Notify rejection
+    setImmediate(async () => {
+      try {
+        const fullTour = { ...existing, ...updated, email: existing.email_cliente };
+        await notifications.onTourStatusChanged(fullTour, existing.estatus, 'Rechazado');
+      } catch (err) {
+        console.error('🔔 Notification error (tour reject):', err.message);
+      }
+    });
+  } catch (err) {
+    console.error('Error rejecting tour:', err);
+    error(res, 'SERVER_ERROR', 'Error rejecting tour', 500);
+  }
+});
+
 // (dead code removed — soft delete on line 228 handles DELETE /tours/:id)
 
 // ══════════════════════════════════════
