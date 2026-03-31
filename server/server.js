@@ -529,11 +529,11 @@ app.post('/api/v1/tours/:id/rechazar', requireAuth, requireRole('admin'), (req, 
 
     success(res, updated);
 
-    // Notify rejection
+    // Notify rejection (partner gets email with motivo)
     setImmediate(async () => {
       try {
         const fullTour = { ...existing, ...updated, email: existing.email_cliente };
-        await notifications.onTourStatusChanged(fullTour, existing.estatus, 'Rechazado');
+        await notifications.onTourRejected(fullTour, motivo);
       } catch (err) {
         console.error('🔔 Notification error (tour reject):', err.message);
       }
@@ -2682,9 +2682,106 @@ app.patch('/api/v1/tours/:id/cxc', requireAuth, requireRole('admin'), (req, res)
 
     const updated = update('reservas_tours', req.params.id, data);
     success(res, updated);
+
+    // Notify CxC status change asynchronously
+    if (data.cxc_estatus && data.cxc_estatus !== tour.cxc_estatus) {
+      setImmediate(async () => {
+        try {
+          const fullTour = { ...tour, ...updated };
+          await notifications.onCxCStatusChanged(fullTour, tour.cxc_estatus || 'Sin Factura', data.cxc_estatus);
+        } catch (err) {
+          console.error('🔔 CxC notification error:', err.message);
+        }
+      });
+    }
   } catch (err) {
     console.error('Error updating CxC:', err);
     error(res, 'SERVER_ERROR', 'Error updating CxC', 500);
+  }
+});
+
+// Admin: Preview email for a CxC tour (returns pre-filled data for popup)
+app.get('/api/v1/tours/:id/cxc/email-preview', requireAuth, requireRole('admin'), (req, res) => {
+  try {
+    const tour = findById('reservas_tours', req.params.id);
+    if (!tour) return error(res, 'NOT_FOUND', 'Tour no encontrado', 404);
+
+    const { tipo } = req.query; // emitida, enviada, pagada
+    const email = require('./notifications/email');
+
+    // Find partner email
+    const db = getDb();
+    const partner = tour.vendedor
+      ? db.prepare('SELECT email FROM usuarios WHERE vendedor = ? AND rol = ? AND activo = 1').get(tour.vendedor, 'partner')
+      : null;
+
+    let html, subject, to;
+    const cc = process.env.NOTIFY_EMAIL_CC || '';
+
+    if (tipo === 'pagada') {
+      html = email.facturaPagadaTemplate(tour);
+      subject = `💰 Pago Registrado — ${tour.vendedor || ''} | Mahana`;
+      to = partner?.email || '';
+    } else {
+      html = email.facturaEnviadaTemplate(tour);
+      subject = tipo === 'emitida'
+        ? `📄 Factura Generada — ${tour.actividad || 'Tour'} | Mahana`
+        : `📄 Factura Enviada al Cobro — ${tour.actividad || 'Tour'} | Mahana`;
+      to = partner?.email || '';
+    }
+
+    success(res, {
+      to,
+      cc,
+      subject,
+      html,
+      has_attachment: !!tour.cxc_factura_url,
+      attachment_url: tour.cxc_factura_url || null,
+      tour_id: tour.id,
+      vendedor: tour.vendedor,
+    });
+  } catch (err) {
+    console.error('Error email preview:', err);
+    error(res, 'SERVER_ERROR', 'Error generating preview', 500);
+  }
+});
+
+// Admin: Send CxC email on demand (from popup)
+app.post('/api/v1/tours/:id/cxc/send-email', requireAuth, requireRole('admin'), async (req, res) => {
+  try {
+    const tour = findById('reservas_tours', req.params.id);
+    if (!tour) return error(res, 'NOT_FOUND', 'Tour no encontrado', 404);
+
+    const { to, cc, subject, attach_factura } = req.body;
+    if (!to || !subject) return error(res, 'VALIDATION_ERROR', 'to y subject son requeridos', 400);
+
+    const emailModule = require('./notifications/email');
+
+    let result;
+    if (attach_factura && tour.cxc_factura_url) {
+      result = await emailModule.sendEmailWithAttachment(
+        to,
+        subject,
+        emailModule.facturaEnviadaTemplate(tour),
+        tour.cxc_factura_url,
+        `Factura_Mahana_${tour.id}.pdf`
+      );
+    } else {
+      const tipo = tour.cxc_estatus === 'Pagada' ? 'pagada' : 'enviada';
+      const html = tipo === 'pagada'
+        ? emailModule.facturaPagadaTemplate(tour)
+        : emailModule.facturaEnviadaTemplate(tour);
+      result = await emailModule.sendEmail(to, subject, html, cc || undefined);
+    }
+
+    if (result.success) {
+      success(res, { sent: true, messageId: result.messageId });
+    } else {
+      error(res, 'EMAIL_FAILED', result.error || 'Error sending', 500);
+    }
+  } catch (err) {
+    console.error('Error sending CxC email:', err);
+    error(res, 'SERVER_ERROR', 'Error sending email', 500);
   }
 });
 

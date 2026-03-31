@@ -773,6 +773,27 @@ export async function updateCxC(tourId: number, data: Record<string, any>): Prom
   return response.data
 }
 
+export interface EmailPreview {
+  to: string
+  cc: string
+  subject: string
+  html: string
+  has_attachment: boolean
+  attachment_url: string | null
+  tour_id: number
+  vendedor: string
+}
+
+export async function getCxCEmailPreview(tourId: number, tipo: string): Promise<ApiResponse<EmailPreview>> {
+  const response = await api.get(`/tours/${tourId}/cxc/email-preview`, { params: { tipo } })
+  return response.data
+}
+
+export async function sendCxCEmail(tourId: number, data: { to: string; cc?: string; subject: string; attach_factura?: boolean }): Promise<ApiResponse<{ sent: boolean; messageId: string }>> {
+  const response = await api.post(`/tours/${tourId}/cxc/send-email`, data)
+  return response.data
+}
+
 export async function getPartnerCxC(): Promise<ApiResponse<{ tours: CxCTour[]; summary: { por_pagar: number; pagado: number; count_pendiente: number; count_pagado: number } }>> {
   try {
     const response = await api.get('/partner/cxc')

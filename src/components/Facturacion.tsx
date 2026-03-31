@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getCxC, updateCxC, uploadFile, CxCTour, CxCData } from '../api/api'
-import { FileText, Clock, CheckCircle, Send, AlertTriangle, Filter, Upload, Download, ChevronDown, ChevronUp, Loader2, RefreshCw, Undo2, Image, ExternalLink } from 'lucide-react'
+import { getCxC, updateCxC, uploadFile, getCxCEmailPreview, sendCxCEmail, CxCTour, CxCData, EmailPreview } from '../api/api'
+import { FileText, Clock, CheckCircle, Send, AlertTriangle, Filter, Upload, Download, ChevronDown, ChevronUp, Loader2, RefreshCw, Undo2, Image, ExternalLink, Mail, X, Paperclip } from 'lucide-react'
 
 const fmt = (n: number) => `$${(n || 0).toFixed(2)}`
 
@@ -29,6 +29,8 @@ export default function Facturacion() {
   const [filter, setFilter] = useState({ vendedor: '', cxc_estatus: '', fecha_desde: '', fecha_hasta: '' })
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [uploading, setUploading] = useState<number | null>(null)
+  const [emailModal, setEmailModal] = useState<{ tourId: number; preview: EmailPreview } | null>(null)
+  const [emailSending, setEmailSending] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -78,6 +80,33 @@ export default function Facturacion() {
       alert('Error al subir factura')
     }
     setUploading(null)
+  }
+
+  const handleOpenEmailModal = async (tour: CxCTour) => {
+    const tipo = tour.cxc_estatus === 'Pagada' ? 'pagada' : tour.cxc_estatus === 'Enviada' ? 'enviada' : 'emitida'
+    const result = await getCxCEmailPreview(tour.id, tipo)
+    if (result.success && result.data) {
+      setEmailModal({ tourId: tour.id, preview: result.data })
+    } else {
+      alert('Error al generar preview de email')
+    }
+  }
+
+  const handleSendEmail = async (to: string, cc: string, subject: string, attachFactura: boolean) => {
+    if (!emailModal) return
+    setEmailSending(true)
+    try {
+      const result = await sendCxCEmail(emailModal.tourId, { to, cc, subject, attach_factura: attachFactura })
+      if (result.success) {
+        alert('✅ Email enviado exitosamente')
+        setEmailModal(null)
+      } else {
+        alert('❌ Error al enviar: ' + (result.error?.message || 'Error desconocido'))
+      }
+    } catch {
+      alert('❌ Error de conexión al enviar email')
+    }
+    setEmailSending(false)
   }
 
   if (loading && !data) {
@@ -215,7 +244,7 @@ export default function Facturacion() {
                     {isExpanded && (
                       <tr key={`${tour.id}-detail`} className="bg-gray-50">
                         <td colSpan={8} className="px-4 py-4">
-                          <ExpandedDetail tour={tour} onStatusChange={handleStatusChange} onRevert={handleRevertStatus} onUpload={handleUploadFactura} uploading={uploading === tour.id} />
+                          <ExpandedDetail tour={tour} onStatusChange={handleStatusChange} onRevert={handleRevertStatus} onUpload={handleUploadFactura} uploading={uploading === tour.id} onEmailPreview={() => handleOpenEmailModal(tour)} />
                         </td>
                       </tr>
                     )}
@@ -229,6 +258,15 @@ export default function Facturacion() {
           </table>
         </div>
       </div>
+      {/* Email Preview Modal */}
+      {emailModal && (
+        <EmailModal
+          preview={emailModal.preview}
+          sending={emailSending}
+          onSend={handleSendEmail}
+          onClose={() => setEmailModal(null)}
+        />
+      )}
     </div>
   )
 }
@@ -267,8 +305,8 @@ function AgingBlock({ label, value, color }: { label: string; value: number; col
   )
 }
 
-function ExpandedDetail({ tour, onStatusChange, onRevert, onUpload, uploading }: {
-  tour: CxCTour & { comprobante_url?: string }; onStatusChange: (t: CxCTour, s: string) => void; onRevert: (t: CxCTour) => void; onUpload: (id: number, f: File) => void; uploading: boolean
+function ExpandedDetail({ tour, onStatusChange, onRevert, onUpload, uploading, onEmailPreview }: {
+  tour: CxCTour & { comprobante_url?: string }; onStatusChange: (t: CxCTour, s: string) => void; onRevert: (t: CxCTour) => void; onUpload: (id: number, f: File) => void; uploading: boolean; onEmailPreview: () => void
 }) {
   const next = nextStatus[tour.cxc_estatus]
   const prev = prevStatus[tour.cxc_estatus]
@@ -345,6 +383,13 @@ function ExpandedDetail({ tour, onStatusChange, onRevert, onUpload, uploading }:
                 <Undo2 className="w-3 h-3" /> Revertir a {prevCfg.label}
               </button>
             )}
+            {/* Email button — always visible when status is not Sin Factura */}
+            {tour.cxc_estatus !== 'Sin Factura' && (
+              <button onClick={onEmailPreview}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors">
+                <Mail className="w-4 h-4" /> Enviar Email al Partner
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -375,6 +420,98 @@ function ExpandedDetail({ tour, onStatusChange, onRevert, onUpload, uploading }:
               <p className="text-xs">Sin comprobante del partner</p>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EmailModal({ preview, sending, onSend, onClose }: {
+  preview: EmailPreview; sending: boolean; onSend: (to: string, cc: string, subject: string, attach: boolean) => void; onClose: () => void
+}) {
+  const [to, setTo] = useState(preview.to)
+  const [cc, setCc] = useState(preview.cc)
+  const [subject, setSubject] = useState(preview.subject)
+  const [attachFactura, setAttachFactura] = useState(preview.has_attachment)
+  const [showPreview, setShowPreview] = useState(false)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-50 to-blue-50 rounded-t-2xl">
+          <div className="flex items-center gap-2">
+            <Mail className="w-5 h-5 text-purple-600" />
+            <h3 className="font-semibold text-gray-900">Enviar Email de Facturación</h3>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="p-4 space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase">Para (To)</label>
+            <input type="email" value={to} onChange={e => setTo(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase">CC (opcional)</label>
+            <input type="email" value={cc} onChange={e => setCc(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 uppercase">Asunto</label>
+            <input type="text" value={subject} onChange={e => setSubject(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none" />
+          </div>
+
+          {/* Attachment toggle */}
+          {preview.has_attachment && (
+            <label className="flex items-center gap-2 p-3 bg-blue-50 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors">
+              <input type="checkbox" checked={attachFactura} onChange={e => setAttachFactura(e.target.checked)}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded" />
+              <Paperclip className="w-4 h-4 text-blue-600" />
+              <span className="text-sm text-blue-800">Adjuntar factura PDF</span>
+            </label>
+          )}
+
+          {/* Preview toggle */}
+          <button onClick={() => setShowPreview(!showPreview)}
+            className="text-xs text-purple-600 hover:underline flex items-center gap-1">
+            {showPreview ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            {showPreview ? 'Ocultar' : 'Ver'} preview del email
+          </button>
+
+          {showPreview && (
+            <div className="border rounded-lg overflow-hidden max-h-60 overflow-y-auto">
+              <iframe
+                srcDoc={preview.html}
+                className="w-full h-60 border-0"
+                title="Email Preview"
+                sandbox=""
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-3 p-4 border-t bg-gray-50 rounded-b-2xl">
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-600 bg-white border rounded-lg hover:bg-gray-100 transition-colors">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onSend(to, cc, subject, attachFactura)}
+            disabled={sending || !to}
+            className="px-5 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+            {sending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+            ) : (
+              <><Send className="w-4 h-4" /> Enviar Email</>
+            )}
+          </button>
         </div>
       </div>
     </div>

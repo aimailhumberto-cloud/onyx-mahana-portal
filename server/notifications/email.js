@@ -340,6 +340,311 @@ async function sendEstadiaStatusChange(estadia, newStatus) {
   return sendEmail(email, subject, estadiaConfirmacionTemplate({ ...estadia, estado: newStatus }));
 }
 
+// ── Partner Templates ──
+
+function partnerSolicitudRecibidaTemplate(tour) {
+  const actividad = tour.actividad_nombre || tour.actividad || 'Tour';
+  const cliente = tour.cliente || '';
+  const fecha = tour.fecha || 'Por confirmar';
+  const personas = tour.personas || tour.pax || 1;
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d6a9f 100%);">
+      <h1>📋 Mahana Tours</h1>
+      <p>Portal de Partners</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #1e3a5f; margin-top: 0;">Solicitud Recibida ✅</h2>
+      <p style="color: #6b7280;">Tu solicitud de tour ha sido recibida y está <strong>pendiente de aprobación</strong> por el equipo Mahana.</p>
+      
+      <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div class="detail-row"><span class="detail-label">🏄 Actividad</span><span class="detail-value">${actividad}</span></div>
+        <div class="detail-row"><span class="detail-label">👤 Cliente</span><span class="detail-value">${cliente}</span></div>
+        <div class="detail-row"><span class="detail-label">📅 Fecha</span><span class="detail-value">${fecha}</span></div>
+        <div class="detail-row"><span class="detail-label">👥 Personas</span><span class="detail-value">${personas}</span></div>
+      </div>
+
+      <div style="background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 12px; text-align: center;">
+        <span style="font-size: 13px; color: #92400e;">⏳ Recibirás un correo cuando sea aprobada o si necesitamos más información.</span>
+      </div>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours — Portal de Partners</p>
+    </div>
+  `, 'Solicitud Recibida — Mahana Tours');
+}
+
+function partnerAprobadoTemplate(tour) {
+  const actividad = tour.actividad_nombre || tour.actividad || 'Tour';
+  const cliente = tour.cliente || '';
+  const fecha = tour.fecha || '';
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #14532d 0%, #15803d 100%);">
+      <h1>✅ Mahana Tours</h1>
+      <p>Portal de Partners</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #14532d; margin-top: 0;">¡Tour Aprobado! 🎉</h2>
+      <p style="color: #6b7280;">Tu solicitud de tour ha sido <strong>aprobada</strong> por el equipo Mahana.</p>
+      
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div class="detail-row"><span class="detail-label">🏄 Actividad</span><span class="detail-value">${actividad}</span></div>
+        <div class="detail-row"><span class="detail-label">👤 Cliente</span><span class="detail-value">${cliente}</span></div>
+        <div class="detail-row"><span class="detail-label">📅 Fecha</span><span class="detail-value">${fecha}</span></div>
+      </div>
+
+      <p style="color: #6b7280; font-size: 13px;">El cliente recibirá su confirmación automáticamente.</p>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours — Portal de Partners</p>
+    </div>
+  `, 'Tour Aprobado — Mahana Tours');
+}
+
+function partnerRechazadoTemplate(tour, motivo) {
+  const actividad = tour.actividad_nombre || tour.actividad || 'Tour';
+  const cliente = tour.cliente || '';
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%);">
+      <h1>❌ Mahana Tours</h1>
+      <p>Portal de Partners</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #7f1d1d; margin-top: 0;">Tour No Aprobado</h2>
+      <p style="color: #6b7280;">Lamentablemente, la solicitud de tour no fue aprobada.</p>
+      
+      <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div class="detail-row"><span class="detail-label">🏄 Actividad</span><span class="detail-value">${actividad}</span></div>
+        <div class="detail-row"><span class="detail-label">👤 Cliente</span><span class="detail-value">${cliente}</span></div>
+      </div>
+
+      ${motivo ? `
+      <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <div style="font-size: 12px; color: #991b1b; font-weight: 600; margin-bottom: 4px;">Motivo:</div>
+        <div style="font-size: 14px; color: #7f1d1d;">${motivo}</div>
+      </div>` : ''}
+
+      <p style="color: #6b7280; font-size: 13px;">
+        Si tienes preguntas, contáctanos por WhatsApp al <strong>+507 6290-6800</strong>.
+      </p>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours — Portal de Partners</p>
+    </div>
+  `, 'Tour Rechazado — Mahana Tours');
+}
+
+// ── Admin/Notification Templates ──
+
+function adminNuevoTourTemplate(tour) {
+  const actividad = tour.actividad_nombre || tour.actividad || 'Tour';
+  const cliente = tour.cliente || '';
+  const fecha = tour.fecha || '';
+  const vendedor = tour.vendedor || 'Desconocido';
+  const precio = tour.precio_ingreso || 0;
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #92400e 0%, #d97706 100%);">
+      <h1>🔔 Nuevo Tour por Aprobar</h1>
+      <p>Acción requerida</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #92400e; margin-top: 0;">Tour Pendiente de Aprobación</h2>
+      <p style="color: #6b7280;">El partner <strong>${vendedor}</strong> ha enviado un nuevo tour:</p>
+      
+      <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div class="detail-row"><span class="detail-label">🏄 Actividad</span><span class="detail-value">${actividad}</span></div>
+        <div class="detail-row"><span class="detail-label">👤 Cliente</span><span class="detail-value">${cliente}</span></div>
+        <div class="detail-row"><span class="detail-label">📅 Fecha</span><span class="detail-value">${fecha}</span></div>
+        <div class="detail-row"><span class="detail-label">🏢 Partner</span><span class="detail-value">${vendedor}</span></div>
+        <div class="detail-row"><span class="detail-label">💰 Precio</span><span class="detail-value">$${precio}</span></div>
+      </div>
+
+      <div style="text-align: center;">
+        <a href="https://onyx-mahana-portal.onrender.com" class="cta-button" style="background: #d97706;">
+          Revisar en el Portal →
+        </a>
+      </div>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours — Notificación Automática</p>
+    </div>
+  `, 'Tour por Aprobar — Mahana Tours');
+}
+
+// ── Facturación Templates ──
+
+function facturaEnviadaTemplate(tour) {
+  const cliente = tour.cliente || '';
+  const actividad = tour.actividad || 'Tour';
+  const vendedor = tour.vendedor || '';
+  const total = tour.cxc_total || 0;
+  const vencimiento = tour.cxc_fecha_vencimiento || 'A convenir';
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);">
+      <h1>📄 Factura Mahana Tours</h1>
+      <p>Detalle de Cuenta por Cobrar</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #1e3a5f; margin-top: 0;">Factura Emitida</h2>
+      <p style="color: #6b7280;">Se ha generado una factura para el siguiente tour:</p>
+      
+      <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div class="detail-row"><span class="detail-label">🏄 Actividad</span><span class="detail-value">${actividad}</span></div>
+        <div class="detail-row"><span class="detail-label">👤 Cliente</span><span class="detail-value">${cliente}</span></div>
+        <div class="detail-row"><span class="detail-label">🏢 Partner</span><span class="detail-value">${vendedor}</span></div>
+        <div class="detail-row"><span class="detail-label">📅 Vencimiento</span><span class="detail-value">${vencimiento}</span></div>
+      </div>
+
+      <div style="background: #f0fdf4; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #d1fae5;">
+          <span style="color: #6b7280; font-size: 13px;">Subtotal:</span>
+          <span style="font-weight: 600;">$${(tour.cxc_subtotal || 0).toFixed(2)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #d1fae5;">
+          <span style="color: #6b7280; font-size: 13px;">ITBM (7%):</span>
+          <span style="font-weight: 600;">$${(tour.cxc_itbm || 0).toFixed(2)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; padding: 12px 0;">
+          <span style="font-weight: 700; font-size: 16px; color: #16a34a;">Total:</span>
+          <span style="font-weight: 700; font-size: 20px; color: #16a34a;">$${total.toFixed ? total.toFixed(2) : total}</span>
+        </div>
+      </div>
+
+      ${tour.cxc_factura_url ? `
+      <div style="text-align: center; margin: 16px 0;">
+        <a href="${tour.cxc_factura_url}" class="cta-button" style="background: #2563eb;">
+          📥 Descargar Factura
+        </a>
+      </div>` : ''}
+
+      <p style="color: #6b7280; font-size: 13px;">
+        Favor realizar el pago antes de la fecha de vencimiento.<br>
+        WhatsApp: <strong>+507 6290-6800</strong>
+      </p>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours — Facturación</p>
+    </div>
+  `, 'Factura — Mahana Tours');
+}
+
+function facturaPagadaTemplate(tour) {
+  const vendedor = tour.vendedor || '';
+  const total = tour.cxc_total || 0;
+
+  return baseTemplate(`
+    <div class="header" style="background: linear-gradient(135deg, #14532d 0%, #16a34a 100%);">
+      <h1>💰 Pago Registrado</h1>
+      <p>Mahana Tours — Facturación</p>
+    </div>
+    <div class="body">
+      <h2 style="color: #14532d; margin-top: 0;">¡Pago Confirmado! ✅</h2>
+      <p style="color: #6b7280;">Se ha registrado el pago de la factura:</p>
+      
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
+        <div style="font-size: 28px; font-weight: 700; color: #16a34a;">$${total.toFixed ? total.toFixed(2) : total}</div>
+        <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Total pagado</div>
+      </div>
+
+      <div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin: 16px 0;">
+        <div class="detail-row"><span class="detail-label">🏢 Partner</span><span class="detail-value">${vendedor}</span></div>
+        <div class="detail-row"><span class="detail-label">🏄 Tour</span><span class="detail-value">${tour.actividad || ''}</span></div>
+        <div class="detail-row"><span class="detail-label">👤 Cliente</span><span class="detail-value">${tour.cliente || ''}</span></div>
+        <div class="detail-row"><span class="detail-label">📅 Fecha pago</span><span class="detail-value">${tour.cxc_fecha_pago || new Date().toISOString().split('T')[0]}</span></div>
+      </div>
+
+      <p style="color: #6b7280; font-size: 13px;">Gracias por tu pago puntual.</p>
+    </div>
+    <div class="footer">
+      <p>Mahana Tours — Facturación</p>
+    </div>
+  `, 'Pago Confirmado — Mahana Tours');
+}
+
+// ── Send Functions for Partners ──
+
+async function sendPartnerSolicitudRecibida(tour, partnerEmail) {
+  if (!partnerEmail) return { success: false, reason: 'no_partner_email' };
+  const subject = `📋 Solicitud Recibida — ${tour.actividad_nombre || tour.actividad || 'Tour'} | Mahana Tours`;
+  return sendEmail(partnerEmail, subject, partnerSolicitudRecibidaTemplate(tour));
+}
+
+async function sendPartnerAprobado(tour, partnerEmail) {
+  if (!partnerEmail) return { success: false, reason: 'no_partner_email' };
+  const subject = `✅ Tour Aprobado — ${tour.actividad_nombre || tour.actividad || 'Tour'} para ${tour.cliente || ''} | Mahana Tours`;
+  return sendEmail(partnerEmail, subject, partnerAprobadoTemplate(tour));
+}
+
+async function sendPartnerRechazado(tour, partnerEmail, motivo) {
+  if (!partnerEmail) return { success: false, reason: 'no_partner_email' };
+  const subject = `❌ Tour No Aprobado — ${tour.actividad_nombre || tour.actividad || 'Tour'} | Mahana Tours`;
+  return sendEmail(partnerEmail, subject, partnerRechazadoTemplate(tour, motivo));
+}
+
+async function sendAdminNuevoTour(tour, adminEmail) {
+  if (!adminEmail) return { success: false, reason: 'no_admin_email' };
+  const subject = `🔔 Tour por Aprobar: ${tour.actividad || 'Tour'} — ${tour.cliente || ''} (${tour.vendedor || ''})`;
+  return sendEmail(adminEmail, subject, adminNuevoTourTemplate(tour));
+}
+
+async function sendFacturaNotification(tour, toEmail, type) {
+  if (!toEmail) return { success: false, reason: 'no_email' };
+  if (type === 'emitida' || type === 'enviada') {
+    const label = type === 'emitida' ? 'Factura Generada' : 'Factura Enviada al Cobro';
+    return sendEmail(toEmail, `📄 ${label} — ${tour.actividad || 'Tour'} | Mahana`, facturaEnviadaTemplate(tour));
+  }
+  if (type === 'pagada') {
+    return sendEmail(toEmail, `💰 Pago Registrado — ${tour.vendedor || ''} | Mahana`, facturaPagadaTemplate(tour));
+  }
+  return { success: false, reason: 'unknown_type' };
+}
+
+// ── Send with attachment (for PDF invoices) ──
+
+async function sendEmailWithAttachment(to, subject, html, attachmentUrl, attachmentName) {
+  const t = getTransporter();
+  if (!t) return { success: false, reason: 'not_configured' };
+
+  try {
+    const mailOptions = {
+      from: SMTP_FROM,
+      to,
+      subject,
+      html,
+    };
+
+    if (attachmentUrl) {
+      mailOptions.attachments = [{
+        filename: attachmentName || 'factura.pdf',
+        path: attachmentUrl,
+      }];
+    }
+
+    const info = await t.sendMail(mailOptions);
+    console.log(`📧 Email+attachment sent to ${to}: ${info.messageId}`);
+    return { success: true, messageId: info.messageId };
+  } catch (err) {
+    console.error(`📧 Email+attachment failed to ${to}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+async function sendFacturaConAdjunto(tour, toEmail) {
+  if (!toEmail || !tour.cxc_factura_url) return { success: false, reason: 'missing_data' };
+  const subject = `📄 Factura — ${tour.actividad || 'Tour'} | Mahana Tours`;
+  return sendEmailWithAttachment(
+    toEmail,
+    subject,
+    facturaEnviadaTemplate(tour),
+    tour.cxc_factura_url,
+    `Factura_Mahana_${tour.id || 'tour'}.pdf`
+  );
+}
+
 // ── Verify SMTP connection ──
 
 async function verifyConnection() {
@@ -357,14 +662,28 @@ async function verifyConnection() {
 
 module.exports = {
   sendEmail,
+  sendEmailWithAttachment,
   sendConfirmacion,
   sendRecordatorio,
   sendResumenDiario,
   sendEstadiaConfirmacion,
   sendEstadiaStatusChange,
+  sendPartnerSolicitudRecibida,
+  sendPartnerAprobado,
+  sendPartnerRechazado,
+  sendAdminNuevoTour,
+  sendFacturaNotification,
+  sendFacturaConAdjunto,
   verifyConnection,
   confirmacionTemplate,
   recordatorioTemplate,
   resumenDiarioTemplate,
   estadiaConfirmacionTemplate,
+  facturaEnviadaTemplate,
+  facturaPagadaTemplate,
+  partnerSolicitudRecibidaTemplate,
+  partnerAprobadoTemplate,
+  partnerRechazadoTemplate,
+  adminNuevoTourTemplate,
 };
+

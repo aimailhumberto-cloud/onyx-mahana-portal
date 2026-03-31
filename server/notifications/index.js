@@ -23,6 +23,16 @@ function isEnabled(channel) {
   return val === 'true' || val === '1';
 }
 
+// ── Helper: find partner email from vendedor name ──
+function getPartnerEmail(vendedor) {
+  if (!vendedor) return null;
+  try {
+    const db = getDb();
+    const partner = db.prepare('SELECT email FROM usuarios WHERE vendedor = ? AND rol = ? AND activo = 1').get(vendedor, 'partner');
+    return partner?.email || null;
+  } catch { return null; }
+}
+
 // ── Initialize channels ──
 
 async function initialize() {
@@ -37,14 +47,36 @@ async function onTourCreated(tour) {
   const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+  const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
   
   // Email confirmation to client
-  if (isEnabled('email') || process.env.SMTP_PASS) {
+  if (emailEnabled) {
     try {
-      results.email = await email.sendConfirmacion(tour, cc || undefined);
+      results.email_client = await email.sendConfirmacion(tour, cc || undefined);
     } catch (err) {
       console.error('🔔 Notification error (email/create):', err.message);
-      results.email = { success: false, error: err.message };
+      results.email_client = { success: false, error: err.message };
+    }
+  }
+
+  // Email to partner (solicitud recibida)
+  if (emailEnabled && tour.vendedor) {
+    try {
+      const partnerEmail = getPartnerEmail(tour.vendedor);
+      if (partnerEmail) {
+        results.email_partner = await email.sendPartnerSolicitudRecibida(tour, partnerEmail);
+      }
+    } catch (err) {
+      console.error('🔔 Notification error (email/partner-create):', err.message);
+    }
+  }
+
+  // Email to admin (nuevo tour por aprobar)
+  if (emailEnabled && cc && tour.vendedor) {
+    try {
+      results.email_admin = await email.sendAdminNuevoTour(tour, cc);
+    } catch (err) {
+      console.error('🔔 Notification error (email/admin-create):', err.message);
     }
   }
 
@@ -77,14 +109,27 @@ async function onTourApproved(tour) {
   const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+  const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
   
   // Email confirmation to client
-  if (isEnabled('email') || process.env.SMTP_PASS) {
+  if (emailEnabled) {
     try {
-      results.email = await email.sendConfirmacion(tour, cc || undefined);
+      results.email_client = await email.sendConfirmacion(tour, cc || undefined);
     } catch (err) {
       console.error('🔔 Notification error (email/approve):', err.message);
-      results.email = { success: false, error: err.message };
+      results.email_client = { success: false, error: err.message };
+    }
+  }
+
+  // Email to partner (tour aprobado)
+  if (emailEnabled && tour.vendedor) {
+    try {
+      const partnerEmail = getPartnerEmail(tour.vendedor);
+      if (partnerEmail) {
+        results.email_partner = await email.sendPartnerAprobado(tour, partnerEmail);
+      }
+    } catch (err) {
+      console.error('🔔 Notification error (email/partner-approve):', err.message);
     }
   }
 
@@ -109,6 +154,37 @@ async function onTourApproved(tour) {
   }
 
   console.log(`🔔 Notifications for approved tour #${tour.id}:`, JSON.stringify(results));
+  return results;
+}
+
+async function onTourRejected(tour, motivo) {
+  const results = {};
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+  const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
+
+  // Email to partner (tour rechazado)
+  if (emailEnabled && tour.vendedor) {
+    try {
+      const partnerEmail = getPartnerEmail(tour.vendedor);
+      if (partnerEmail) {
+        results.email_partner = await email.sendPartnerRechazado(tour, partnerEmail, motivo);
+      }
+    } catch (err) {
+      console.error('🔔 Notification error (email/partner-reject):', err.message);
+    }
+  }
+
+  // Telegram
+  if (tgChatId) {
+    try {
+      const msg = `🚫 *Tour Rechazado*\n🏄 ${tour.actividad || ''}\n👤 ${tour.cliente || ''}\n🏢 ${tour.vendedor || ''}${motivo ? `\n📝 Motivo: ${motivo}` : ''}`;
+      results.telegram = await telegram.sendTelegram(tgChatId, msg);
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+
+  console.log(`🔔 Notifications for rejected tour #${tour.id}:`, JSON.stringify(results));
   return results;
 }
 
@@ -480,10 +556,68 @@ async function onReviewSubmitted(review) {
   return results;
 }
 
+// ── CxC / Facturación Events ──
+
+async function onCxCStatusChanged(tour, oldStatus, newStatus) {
+  const results = {};
+  const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
+  const contabilidadEmail = process.env.NOTIFY_EMAIL_CONTABILIDAD || getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+  const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
+
+  // Find partner email
+  const partnerEmail = getPartnerEmail(tour.vendedor);
+
+  if (emailEnabled) {
+    // Send to partner
+    if (partnerEmail) {
+      try {
+        if (newStatus === 'Pendiente') {
+          results.email_partner = await email.sendFacturaNotification(tour, partnerEmail, 'emitida');
+        } else if (newStatus === 'Enviada') {
+          // If factura PDF exists, send with attachment
+          if (tour.cxc_factura_url) {
+            results.email_partner = await email.sendFacturaConAdjunto(tour, partnerEmail);
+          } else {
+            results.email_partner = await email.sendFacturaNotification(tour, partnerEmail, 'enviada');
+          }
+        } else if (newStatus === 'Pagada') {
+          results.email_partner = await email.sendFacturaNotification(tour, partnerEmail, 'pagada');
+        }
+      } catch (err) {
+        console.error('🔔 CxC email to partner failed:', err.message);
+      }
+    }
+
+    // Send to contabilidad on payment
+    if (contabilidadEmail && newStatus === 'Pagada') {
+      try {
+        results.email_contabilidad = await email.sendFacturaNotification(tour, contabilidadEmail, 'pagada');
+      } catch (err) {
+        console.error('🔔 CxC email to contabilidad failed:', err.message);
+      }
+    }
+  }
+
+  // Telegram on relevant changes
+  if (tgChatId && ['Enviada', 'Pagada'].includes(newStatus)) {
+    try {
+      const emoji = { 'Enviada': '📄', 'Pagada': '💰' };
+      const msg = `${emoji[newStatus] || '🔄'} *CxC ${oldStatus} → ${newStatus}*\n🏢 ${tour.vendedor || ''}\n🏄 ${tour.actividad || ''}\n👤 ${tour.cliente || ''}\n💵 $${tour.cxc_total || 0}`;
+      results.telegram = await telegram.sendTelegram(tgChatId, msg);
+    } catch (err) {
+      results.telegram = { success: false, error: err.message };
+    }
+  }
+
+  console.log(`🔔 CxC ${tour.id} ${oldStatus} → ${newStatus}:`, JSON.stringify(results));
+  return results;
+}
+
 module.exports = {
   initialize,
   onTourCreated,
   onTourApproved,
+  onTourRejected,
   onTourStatusChanged,
   onEstadiaCreated,
   onEstadiaStatusChanged,
@@ -492,7 +626,9 @@ module.exports = {
   onTicketCreated,
   onTicketResolved,
   onReviewSubmitted,
+  onCxCStatusChanged,
   sendDailyReminders,
   sendDailySummary,
   verifyAll,
 };
+
