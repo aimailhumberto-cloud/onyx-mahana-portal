@@ -2787,13 +2787,17 @@ app.post('/api/v1/tours/:id/cxc/send-email', requireAuth, requireRole('admin'), 
     let result;
     if (attach_factura && tour.cxc_factura_url) {
       // Send with attachment + optional CC
+      // Convert URL path (/uploads/file.jpg) to absolute filesystem path
+      const fileName = path.basename(tour.cxc_factura_url);
+      const filePath = path.join(uploadsDir, fileName);
+      const ext = path.extname(fileName) || '.pdf';
       const html = emailModule.facturaEnviadaTemplate(tour);
       result = await emailModule.sendEmailWithAttachment(
         to,
         subject,
         html,
-        tour.cxc_factura_url,
-        `Factura_Mahana_${tour.id}.pdf`,
+        filePath,
+        `Factura_Mahana_${tour.id}${ext}`,
         cc || undefined
       );
     } else {
