@@ -278,16 +278,39 @@ function estadiaConfirmacionTemplate(estadia) {
   const checkIn = estadia.check_in || 'Por confirmar';
   const checkOut = estadia.check_out || '';
   const huespedes = estadia.huespedes || '—';
-  const precio = estadia.precio_final || 0;
+  const precio = estadia.precio_final || estadia.precio_cotizado || 0;
+  const estado = estadia.estado || 'Solicitada';
+
+  // Dynamic content based on status
+  const statusConfig = {
+    'Solicitada': { emoji: '📋', title: 'Solicitud Recibida', color: '#2563eb', msg: 'tu solicitud de estadía ha sido recibida. Nos pondremos en contacto contigo pronto.' },
+    'Cotizada': { emoji: '💬', title: 'Cotización Enviada', color: '#d97706', msg: 'te hemos enviado una cotización para tu estadía:' },
+    'Confirmada': { emoji: '✅', title: '¡Estadía Confirmada!', color: '#16a34a', msg: 'tu estadía ha sido confirmada:' },
+    'Pagada': { emoji: '💰', title: '¡Pago Recibido!', color: '#16a34a', msg: 'hemos recibido tu pago. ¡Todo listo para tu estadía!' },
+    'Perdida': { emoji: '❌', title: 'Estadía Cancelada', color: '#dc2626', msg: 'lamentamos informarte que la estadía ha sido cancelada.' },
+  };
+  const cfg = statusConfig[estado] || statusConfig['Solicitada'];
+
+  // Gradient colors per status
+  const gradients = {
+    'Solicitada': 'linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)',
+    'Cotizada': 'linear-gradient(135deg, #92400e 0%, #d97706 100%)',
+    'Confirmada': 'linear-gradient(135deg, #14532d 0%, #16a34a 100%)',
+    'Pagada': 'linear-gradient(135deg, #14532d 0%, #16a34a 100%)',
+    'Perdida': 'linear-gradient(135deg, #7f1d1d 0%, #dc2626 100%)',
+  };
+  const gradient = gradients[estado] || gradients['Solicitada'];
+
+  const precioLabel = estado === 'Cotizada' ? 'Precio cotizado' : 'Total';
 
   return baseTemplate(`
-    <div class="header" style="background: linear-gradient(135deg, #4a1d8e 0%, #7c3aed 100%);">
+    <div class="header" style="background: ${gradient};">
       <h1>🏨 Mahana Stays</h1>
       <p>Hospedaje en Panamá</p>
     </div>
     <div class="body">
-      <h2 style="color: #4a1d8e; margin-top: 0;">¡Estadía Confirmada! ✅</h2>
-      <p style="color: #6b7280;">Hola <strong>${cliente}</strong>, tu estadía ha sido confirmada:</p>
+      <h2 style="color: ${cfg.color}; margin-top: 0;">${cfg.emoji} ${cfg.title}</h2>
+      <p style="color: #6b7280;">Hola <strong>${cliente}</strong>, ${cfg.msg}</p>
       
       <div style="background: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
         <div class="detail-row">
@@ -306,11 +329,15 @@ function estadiaConfirmacionTemplate(estadia) {
           <span class="detail-label">👥 Huéspedes</span>
           <span class="detail-value">${huespedes}</span>
         </div>
+        <div class="detail-row">
+          <span class="detail-label">📌 Estado</span>
+          <span class="detail-value" style="color: ${cfg.color}; font-weight: 700;">${cfg.emoji} ${estado}</span>
+        </div>
       </div>
 
       ${precio > 0 ? `<div class="highlight-box">
         <div class="amount">$${precio}</div>
-        <div class="label">Total</div>
+        <div class="label">${precioLabel}</div>
       </div>` : ''}
 
       <p style="color: #6b7280; font-size: 13px;">
@@ -320,14 +347,17 @@ function estadiaConfirmacionTemplate(estadia) {
     <div class="footer">
       <p>Mahana Tours & Stays — Panamá 🇵🇦</p>
     </div>
-  `, 'Estadía Confirmada — Mahana');
+  `, `${cfg.title} — Mahana Stays`);
 }
 
 async function sendEstadiaConfirmacion(estadia, cc = null) {
   const clientEmail = estadia.email;
   if (!clientEmail && !cc) return { success: false, reason: 'no_email' };
   const to = clientEmail || cc;
-  const subject = `✅ Estadía Confirmada — ${estadia.propiedad || 'Hospedaje'} | Mahana`;
+  const estado = estadia.estado || 'Solicitada';
+  const statusEmoji = { 'Solicitada': '📋', 'Cotizada': '💬', 'Confirmada': '✅', 'Pagada': '💰' };
+  const emoji = statusEmoji[estado] || '📋';
+  const subject = `${emoji} ${estado} — ${estadia.propiedad || 'Hospedaje'} | Mahana Stays`;
   return sendEmail(to, subject, estadiaConfirmacionTemplate(estadia), clientEmail ? cc : null);
 }
 
