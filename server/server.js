@@ -2827,41 +2827,35 @@ app.get('/api/v1/public/disponibilidad/:slug', publicRateLimit(60), (req, res) =
     const desde = `${mes}-01`;
     const hasta = `${mes}-${String(daysInMonth).padStart(2, '0')}`;
     
-    // ── Auto-generate slots from plantillas if none exist for this month ──
+    // ── Auto-generate slots from plantillas (INSERT OR IGNORE = safe to re-run) ──
     try {
-      const existingCount = db.prepare(
-        'SELECT COUNT(*) as c FROM horarios_slots WHERE actividad_id = ? AND fecha >= ? AND fecha <= ?'
-      ).get(producto.id, desde, hasta);
+      const plantillas = db.prepare(
+        'SELECT * FROM plantillas_horario WHERE activa = 1 AND actividad_id = ?'
+      ).all(producto.id);
       
-      if (existingCount.c === 0) {
-        const plantillas = db.prepare(
-          'SELECT * FROM plantillas_horario WHERE activa = 1 AND actividad_id = ?'
-        ).all(producto.id);
+      if (plantillas.length > 0) {
+        const bloqueosPre = db.prepare(
+          'SELECT actividad_id, fecha FROM bloqueos_fechas WHERE fecha >= ? AND fecha <= ?'
+        ).all(desde, hasta);
+        const bloqueosPreSet = new Set(bloqueosPre.map(b => `${b.actividad_id || 'all'}-${b.fecha}`));
         
-        if (plantillas.length > 0) {
-          const bloqueosPre = db.prepare(
-            'SELECT actividad_id, fecha FROM bloqueos_fechas WHERE fecha >= ? AND fecha <= ?'
-          ).all(desde, hasta);
-          const bloqueosPreSet = new Set(bloqueosPre.map(b => `${b.actividad_id || 'all'}-${b.fecha}`));
-          
-          const insertStmt = db.prepare(
-            'INSERT OR IGNORE INTO horarios_slots (actividad_id, fecha, hora, capacidad, reservados, bloqueado) VALUES (?, ?, ?, ?, 0, 0)'
-          );
-          const txn = db.transaction(() => {
-            for (let day = 1; day <= daysInMonth; day++) {
-              const date = new Date(year, month - 1, day);
-              const dayOfWeek = date.getDay();
-              const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-              for (const p of plantillas) {
-                if (p.dia_semana === dayOfWeek) {
-                  if (bloqueosPreSet.has(`${p.actividad_id}-${dateStr}`) || bloqueosPreSet.has(`all-${dateStr}`)) continue;
-                  insertStmt.run(p.actividad_id, dateStr, p.hora, p.capacidad);
-                }
+        const insertStmt = db.prepare(
+          'INSERT OR IGNORE INTO horarios_slots (actividad_id, fecha, hora, capacidad, reservados, bloqueado) VALUES (?, ?, ?, ?, 0, 0)'
+        );
+        const txn = db.transaction(() => {
+          for (let day = 1; day <= daysInMonth; day++) {
+            const date = new Date(year, month - 1, day);
+            const dayOfWeek = date.getDay();
+            const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            for (const p of plantillas) {
+              if (p.dia_semana === dayOfWeek) {
+                if (bloqueosPreSet.has(`${p.actividad_id}-${dateStr}`) || bloqueosPreSet.has(`all-${dateStr}`)) continue;
+                insertStmt.run(p.actividad_id, dateStr, p.hora, p.capacidad);
               }
             }
-          });
-          txn();
-        }
+          }
+        });
+        txn();
       }
     } catch (genErr) {
       console.error('Auto-generate in public endpoint (non-fatal):', genErr.message);
