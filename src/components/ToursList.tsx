@@ -458,8 +458,10 @@ export default function ToursList() {
                                   <div className="w-56 shrink-0">
                                     <span className="text-gray-400 text-xs block mb-2 font-medium uppercase tracking-wide">Facturación CxC</span>
                                     <div className="bg-white rounded-xl border-2 border-gray-200 p-3 space-y-1.5 text-xs">
-                                      <div className="flex justify-between"><span className="text-gray-500">Subtotal:</span><span>{`$${(expandedDetail.cxc_subtotal || 0).toFixed(2)}`}</span></div>
-                                      <div className="flex justify-between"><span className="text-gray-500">ITBM:</span><span>{`$${(expandedDetail.cxc_itbm || 0).toFixed(2)}`}</span></div>
+                                      <div className="flex justify-between"><span className="text-gray-500">Precio:</span><span>{`$${(expandedDetail.precio_ingreso || 0).toFixed(2)}`}</span></div>
+                                      <div className="flex justify-between"><span className="text-gray-500">Comisión ({expandedDetail.comision_pct || 0}%):</span><span className="text-red-500">{`-$${(expandedDetail.monto_comision || 0).toFixed(2)}`}</span></div>
+                                      <div className="flex justify-between border-t pt-1"><span className="text-gray-500">Subtotal:</span><span>{`$${(expandedDetail.cxc_subtotal || 0).toFixed(2)}`}</span></div>
+                                      <div className="flex justify-between"><span className="text-gray-500">ITBM (7%):</span><span>{`$${(expandedDetail.cxc_itbm || 0).toFixed(2)}`}</span></div>
                                       <div className="flex justify-between font-bold border-t pt-1"><span>Total CxC:</span><span className="text-turquoise-600">{`$${(expandedDetail.cxc_total || 0).toFixed(2)}`}</span></div>
                                       <div className="pt-1 border-t">
                                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
