@@ -40,10 +40,19 @@ async function initialize() {
   await whatsapp.connectWhatsApp();
 }
 
+// ── Helper: Get admin notification email(s) ──
+// Uses 'email_team' as the primary admin email list, falls back to 'email_cc_default' → env var
+function getAdminEmails() {
+  const team = getConfig('email_team', '');
+  if (team) return team;
+  return getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC || '');
+}
+
 // ── Tour Events ──
 
 async function onTourCreated(tour) {
   const results = {};
+  const adminEmails = getAdminEmails();
   const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
@@ -53,7 +62,7 @@ async function onTourCreated(tour) {
   if (emailEnabled) {
     if (isPartnerTour) {
       // ── Partner-submitted tour: do NOT email client (not confirmed yet) ──
-      // Only notify partner (solicitud recibida) + admin (tour por aprobar)
+      // Only notify partner (solicitud recibida) + admin team (tour por aprobar)
       
       // Partner: "Tu solicitud fue recibida"
       if (tour.vendedor) {
@@ -67,10 +76,10 @@ async function onTourCreated(tour) {
         }
       }
 
-      // Admin: "Nuevo tour por aprobar"
-      if (cc && tour.vendedor) {
+      // Admin team: "Nuevo tour por aprobar"
+      if (adminEmails) {
         try {
-          results.email_admin = await email.sendAdminNuevoTour(tour, cc);
+          results.email_admin = await email.sendAdminNuevoTour(tour, adminEmails);
         } catch (err) {
           console.error('🔔 Notification error (email/admin-create):', err.message);
         }
@@ -113,6 +122,7 @@ async function onTourCreated(tour) {
 async function onTourApproved(tour) {
   const results = {};
   const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
+  const adminEmails = getAdminEmails();
   const waNumber = getConfig('whatsapp_notify', process.env.WHATSAPP_NOTIFY_NUMBER);
   const tgChatId = getConfig('telegram_chat_id', process.env.TELEGRAM_CHAT_ID);
   const emailEnabled = isEnabled('email') || process.env.SMTP_PASS;
@@ -217,18 +227,18 @@ async function onTourStatusChanged(tour, oldStatus, newStatus) {
     }
   }
 
-  // ── Email to ADMIN on any status change (internal tracking) ──
-  const cc = getConfig('email_cc_default', process.env.NOTIFY_EMAIL_CC);
-  if (cc && emailEnabled) {
+  // ── Email to ADMIN TEAM on any status change (internal tracking) ──
+  const adminEmails = getAdminEmails();
+  if (adminEmails && emailEnabled) {
     try {
       const statusEmoji = { 'Pagado': '💰', 'Aprobado': '✅', 'Reservado': '📋', 'Cancelado': '❌', 'Rechazado': '🚫', 'Cerrado': '🏁' };
       await email.sendEmail(
-        cc,
+        adminEmails,
         `${statusEmoji[newStatus] || '🔄'} Tour ${oldStatus} → ${newStatus}: ${tour.cliente || ''} — ${tour.actividad || ''}`,
         email.confirmacionTemplate(tour)
       );
     } catch (err) {
-      console.error('🔔 Admin CC email failed:', err.message);
+      console.error('🔔 Admin team email failed:', err.message);
     }
   }
 

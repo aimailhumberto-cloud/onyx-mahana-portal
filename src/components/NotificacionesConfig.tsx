@@ -14,8 +14,8 @@ const SECTIONS = [
     color: 'blue',
     fields: [
       { key: 'email_enabled', label: 'Emails habilitados', type: 'toggle' },
-      { key: 'email_cc_default', label: 'CC automático', placeholder: 'ventas@toursmahana.com', hint: 'Se agrega como CC en cada email al cliente' },
-      { key: 'email_team', label: 'Emails del equipo', placeholder: 'correo1@..., correo2@...', hint: 'Reciben el resumen diario (separar con coma)' },
+      { key: 'email_cc_default', label: 'CC en emails al cliente', placeholder: 'humberto@toursmahana.com', hint: 'Se agrega como CC cuando se envía confirmación al cliente' },
+      { key: 'email_team', label: 'Notificaciones Admin', placeholder: 'humberto@toursmahana.com, ventas@..., contabilidad@...', hint: 'Reciben TODOS los avisos: nuevos tours, cambios de estatus, aprobaciones (separar con coma)' },
       { key: 'email_caracol', label: 'Email Caracol', placeholder: 'reservas@playacaracol.com', hint: 'Recibe copia en estadías de sus propiedades' },
     ]
   },
