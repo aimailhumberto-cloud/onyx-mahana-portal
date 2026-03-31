@@ -605,7 +605,7 @@ async function sendFacturaNotification(tour, toEmail, type) {
 
 // ── Send with attachment (for PDF invoices) ──
 
-async function sendEmailWithAttachment(to, subject, html, attachmentUrl, attachmentName) {
+async function sendEmailWithAttachment(to, subject, html, attachmentUrl, attachmentName, cc = null) {
   const t = getTransporter();
   if (!t) return { success: false, reason: 'not_configured' };
 
@@ -617,6 +617,8 @@ async function sendEmailWithAttachment(to, subject, html, attachmentUrl, attachm
       html,
     };
 
+    if (cc) mailOptions.cc = cc;
+
     if (attachmentUrl) {
       mailOptions.attachments = [{
         filename: attachmentName || 'factura.pdf',
@@ -625,7 +627,7 @@ async function sendEmailWithAttachment(to, subject, html, attachmentUrl, attachm
     }
 
     const info = await t.sendMail(mailOptions);
-    console.log(`📧 Email+attachment sent to ${to}: ${info.messageId}`);
+    console.log(`📧 Email+attachment sent to ${to}${cc ? ` (CC: ${cc})` : ''}: ${info.messageId}`);
     return { success: true, messageId: info.messageId };
   } catch (err) {
     console.error(`📧 Email+attachment failed to ${to}:`, err.message);

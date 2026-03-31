@@ -41,6 +41,22 @@ const EMPTY_PROP: Partial<Propiedad> = {
   precio_noche: null, impuesto_pct: 0, cleaning_fee: 0, amenidades: '', activa: 1,
 }
 
+// Safe parser for the 'sitios' JSON field — some DB records have malformed data
+function parseSitios(sitios: any): string[] {
+  if (!sitios) return []
+  if (Array.isArray(sitios)) return sitios
+  if (typeof sitios !== 'string') return []
+  try {
+    const parsed = JSON.parse(sitios)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    // Fallback: try parsing as bracket-wrapped comma list e.g. "[mahanatours,ans-surf]"
+    const cleaned = sitios.replace(/^\[|\]$/g, '').trim()
+    if (!cleaned) return []
+    return cleaned.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
+  }
+}
+
 export default function Productos() {
   const [tab, setTab] = useState<'actividades' | 'propiedades'>('actividades')
   const [actividades, setActividades] = useState<Actividad[]>([])
@@ -493,7 +509,7 @@ export default function Productos() {
                       <label className="block text-xs font-medium text-gray-600 mb-1.5">Sitios donde está activo</label>
                       <div className="flex flex-wrap gap-2">
                         {SITIOS_OPTIONS.map(sitio => {
-                          const currentSitios: string[] = actForm.sitios ? (typeof actForm.sitios === 'string' ? JSON.parse(actForm.sitios) : actForm.sitios) : []
+                          const currentSitios: string[] = parseSitios(actForm.sitios)
                           const isActive = currentSitios.includes(sitio.key)
                           return (
                             <button

@@ -96,15 +96,16 @@ export default function Facturacion() {
     if (!emailModal) return
     setEmailSending(true)
     try {
-      const result = await sendCxCEmail(emailModal.tourId, { to, cc, subject, attach_factura: attachFactura })
+      const result = await sendCxCEmail(emailModal.tourId, { to, cc: cc || undefined, subject, attach_factura: attachFactura })
       if (result.success) {
         alert('✅ Email enviado exitosamente')
         setEmailModal(null)
       } else {
         alert('❌ Error al enviar: ' + (result.error?.message || 'Error desconocido'))
       }
-    } catch {
-      alert('❌ Error de conexión al enviar email')
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message || err?.message || 'Error de conexión'
+      alert(`❌ Error al enviar email: ${msg}`)
     }
     setEmailSending(false)
   }

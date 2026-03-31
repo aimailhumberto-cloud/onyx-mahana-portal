@@ -112,14 +112,23 @@ function sanitize(str) {
 }
 
 // CxC auto-calculation: subtotal = precio - comision, itbm = 7%, total = subtotal + itbm
+// Also returns monto_comision and ganancia_mahana so they stay in sync
 function calcCxC(data) {
   const precio = parseFloat(data.precio_ingreso) || 0;
+  const costo = parseFloat(data.costo_pago) || 0;
   const comPct = parseFloat(data.comision_pct) || 0;
-  const comision = parseFloat(data.monto_comision) || (precio * comPct / 100);
+  const comision = parseFloat(data.monto_comision) || Math.round((precio * comPct / 100) * 100) / 100;
+  const ganancia = Math.round((precio - costo - comision) * 100) / 100;
   const subtotal = Math.round((precio - comision) * 100) / 100;
   const itbm = Math.round((subtotal * 0.07) * 100) / 100;
   const total = Math.round((subtotal + itbm) * 100) / 100;
-  return { cxc_subtotal: subtotal, cxc_itbm: itbm, cxc_total: total };
+  return {
+    monto_comision: comision,
+    ganancia_mahana: ganancia,
+    cxc_subtotal: subtotal,
+    cxc_itbm: itbm,
+    cxc_total: total,
+  };
 }
 
 // ── API Status ──
@@ -1098,7 +1107,25 @@ app.post('/api/v1/tours/:id/aprobar', requireAuth, requireRole('admin'), (req, r
       return error(res, 'INVALID_STATUS', `Tour tiene estatus "${tour.estatus}", solo se pueden aprobar tours "Por Aprobar"`, 400);
     }
 
-    const updated = update('reservas_tours', tour.id, { estatus: 'Aprobado' });
+    const updateData = { estatus: 'Aprobado' };
+
+    // Auto-calculate financial fields if missing (partner-submitted tours have no pricing)
+    if (!tour.precio_ingreso && tour.actividad) {
+      const actividad = db.prepare('SELECT precio_base, costo_base, comision_caracol_pct FROM actividades WHERE nombre = ?').get(tour.actividad);
+      if (actividad) {
+        updateData.precio_ingreso = actividad.precio_base || 0;
+        updateData.costo_pago = actividad.costo_base || 0;
+        updateData.comision_pct = actividad.comision_caracol_pct || 0;
+      }
+    }
+
+    // Recalculate CxC with merged data (existing tour + new updates)
+    const merged = { ...tour, ...updateData };
+    if (merged.precio_ingreso) {
+      Object.assign(updateData, calcCxC(merged));
+    }
+
+    const updated = update('reservas_tours', tour.id, updateData);
 
     // Create alert
     db.prepare(`INSERT INTO alertas (tipo, mensaje, referencia_tipo, referencia_id, datos_extra)
@@ -2759,12 +2786,15 @@ app.post('/api/v1/tours/:id/cxc/send-email', requireAuth, requireRole('admin'), 
 
     let result;
     if (attach_factura && tour.cxc_factura_url) {
+      // Send with attachment + optional CC
+      const html = emailModule.facturaEnviadaTemplate(tour);
       result = await emailModule.sendEmailWithAttachment(
         to,
         subject,
-        emailModule.facturaEnviadaTemplate(tour),
+        html,
         tour.cxc_factura_url,
-        `Factura_Mahana_${tour.id}.pdf`
+        `Factura_Mahana_${tour.id}.pdf`,
+        cc || undefined
       );
     } else {
       const tipo = tour.cxc_estatus === 'Pagada' ? 'pagada' : 'enviada';
@@ -2777,11 +2807,14 @@ app.post('/api/v1/tours/:id/cxc/send-email', requireAuth, requireRole('admin'), 
     if (result.success) {
       success(res, { sent: true, messageId: result.messageId });
     } else {
-      error(res, 'EMAIL_FAILED', result.error || 'Error sending', 500);
+      const msg = result.reason === 'not_configured'
+        ? 'Email no configurado — falta SMTP_PASS en variables de entorno'
+        : (result.error || 'Error al enviar email');
+      error(res, 'EMAIL_FAILED', msg, 500);
     }
   } catch (err) {
     console.error('Error sending CxC email:', err);
-    error(res, 'SERVER_ERROR', 'Error sending email', 500);
+    error(res, 'SERVER_ERROR', `Error al enviar email: ${err.message || 'Error interno'}`, 500);
   }
 });
 
