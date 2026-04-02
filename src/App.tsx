@@ -25,6 +25,7 @@ import SatisfaccionDashboard from './components/SatisfaccionDashboard'
 import PartnerTickets from './components/partner/PartnerTickets'
 import ReviewPage from './components/ReviewPage'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
 
 function AppRoutes() {
@@ -32,10 +33,15 @@ function AppRoutes() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-turquoise-600 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Cargando...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-azul-900 via-azul-800 to-turquoise-900">
+        <div className="text-center animate-fadeIn">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-turquoise-400 to-turquoise-600 flex items-center justify-center mx-auto mb-4 shadow-glow-turquoise animate-float">
+            <img src="/mahana-logo.jpg" alt="" className="w-12 h-12 rounded-xl object-cover" onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none'
+            }} />
+          </div>
+          <Loader2 className="w-5 h-5 animate-spin text-turquoise-400 mx-auto mb-2" />
+          <p className="text-turquoise-300/70 text-sm font-medium">Cargando portal...</p>
         </div>
       </div>
     )
@@ -110,7 +116,9 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
-          <AppRoutes />
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

@@ -259,9 +259,9 @@ export default function TicketsServicio() {
   const assignableUsers = usersList.filter(u => u.rol === 'admin' || u.rol === 'vendedor')
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-fadeInDown">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">🎫 Tickets de Servicio</h1>
           <p className="text-sm text-gray-500">Gestión de quejas, incidencias y mejora continua</p>
@@ -277,7 +277,7 @@ export default function TicketsServicio() {
           </button>
           <button
             onClick={() => setShowCreate(true)}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 transition-all hover:scale-105"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 rounded-xl font-medium flex items-center gap-2 btn-premium shadow-glow-blue"
           >
             <Plus className="w-4 h-4" /> Nuevo Ticket
           </button>
@@ -286,41 +286,41 @@ export default function TicketsServicio() {
 
       {/* KPIs */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 animate-fadeInUp">
+          <div className="card-premium p-4">
             <div className="flex items-center gap-2 text-red-600 mb-1">
               <AlertTriangle className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase">Abiertos</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Abiertos</span>
             </div>
             <span className="text-2xl font-bold text-gray-800">{stats.abiertos || 0}</span>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+          <div className="card-premium p-4">
             <div className="flex items-center gap-2 text-yellow-600 mb-1">
               <Clock className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase">En Proceso</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">En Proceso</span>
             </div>
             <span className="text-2xl font-bold text-gray-800">{stats.en_proceso || 0}</span>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+          <div className="card-premium p-4">
             <div className="flex items-center gap-2 text-green-600 mb-1">
               <CheckCircle className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase">Resueltos</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Resueltos</span>
             </div>
             <span className="text-2xl font-bold text-gray-800">{stats.resueltos || 0}</span>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+          <div className="card-premium p-4">
             <div className="flex items-center gap-2 text-blue-600 mb-1">
               <Clock className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase">T. Resolución</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">T. Resolución</span>
             </div>
             <span className="text-2xl font-bold text-gray-800">
               {stats.avgResolutionHours ? `${stats.avgResolutionHours}h` : '—'}
             </span>
           </div>
-          <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+          <div className="card-premium p-4">
             <div className="flex items-center gap-2 text-purple-600 mb-1">
               <RefreshCw className="w-4 h-4" />
-              <span className="text-xs font-medium uppercase">Recurrentes</span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Recurrentes</span>
             </div>
             <span className="text-2xl font-bold text-gray-800">{stats.recurrentes?.length || 0}</span>
           </div>
@@ -330,28 +330,28 @@ export default function TicketsServicio() {
       {/* Charts section */}
       {showCharts && stats && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+          <div className="card-premium p-5 animate-fadeInUp">
             <DonutChart
               title="Por Categoría"
               data={(stats.porCategoria || []).map(c => ({ label: c.categoria || 'Sin cat.', value: c.count }))}
               colors={CAT_COLORS}
             />
           </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+          <div className="card-premium p-5">
             <DonutChart
               title="Por Prioridad"
               data={(stats.porPrioridad || []).map(p => ({ label: p.prioridad, value: p.count }))}
               colors={(stats.porPrioridad || []).map(p => PRIO_COLORS[p.prioridad] || '#9ca3af')}
             />
           </div>
-          <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+          <div className="card-premium p-5">
             <HBarChart
               title="Top Tours con Tickets"
               data={(stats.porActividad || []).map(a => ({ label: a.actividad || 'Sin tour', value: a.count }))}
             />
           </div>
           {stats.tendencia && stats.tendencia.length > 1 && (
-            <div className="bg-white rounded-xl p-5 border border-gray-100 shadow-sm md:col-span-3">
+            <div className="card-premium p-5 md:col-span-3">
               <TrendChart data={stats.tendencia} />
             </div>
           )}
@@ -378,7 +378,7 @@ export default function TicketsServicio() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+      <div className="card-premium p-4 animate-fadeInUp">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex-1 min-w-[200px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -433,7 +433,7 @@ export default function TicketsServicio() {
             <div
               key={ticket.id}
               onClick={() => setShowDetail(ticket)}
-              className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
+              className="card-premium-interactive p-4"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
@@ -469,8 +469,8 @@ export default function TicketsServicio() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-10 px-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mb-10">
+        <div className="fixed inset-0 modal-overlay z-50 flex items-start justify-center pt-10 px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-premium-xl w-full max-w-2xl mb-10 modal-content">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <h2 className="text-lg font-bold text-gray-800">🎫 Nuevo Ticket</h2>
               <button onClick={() => setShowCreate(false)} className="p-1 hover:bg-gray-100 rounded-lg">
@@ -553,8 +553,8 @@ export default function TicketsServicio() {
 
       {/* Detail Modal */}
       {showDetail && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-10 px-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mb-10">
+        <div className="fixed inset-0 modal-overlay z-50 flex items-start justify-center pt-10 px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-premium-xl w-full max-w-2xl mb-10 modal-content">
             <div className="flex items-center justify-between p-5 border-b border-gray-100">
               <div>
                 <div className="flex items-center gap-2">

@@ -35,12 +35,12 @@ export default function LoginPage() {
         <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-turquoise-600/10 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md">
+      <div className="relative w-full max-w-md animate-fadeInUp">
         {/* Card */}
-        <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl p-8">
+        <div className="bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-premium-xl p-8">
           {/* Logo + Title */}
           <div className="text-center mb-8">
-            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-turquoise-400 to-turquoise-600 flex items-center justify-center shadow-lg shadow-turquoise-500/30">
+            <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-turquoise-400 to-turquoise-600 flex items-center justify-center shadow-glow-turquoise animate-float">
               <img src="/mahana-logo.jpg" alt="Mahana" className="w-16 h-16 rounded-xl object-cover" onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none'
                 ;(e.target as HTMLImageElement).parentElement!.innerHTML = '<span class="text-2xl font-bold text-white">MT</span>'

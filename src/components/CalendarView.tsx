@@ -115,7 +115,7 @@ export default function CalendarView() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fadeIn">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
@@ -139,7 +139,7 @@ export default function CalendarView() {
       </div>
 
       {/* Legend */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+      <div className="card-premium px-4 py-2.5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs animate-fadeInUp">
         <span className="font-semibold text-gray-500 uppercase tracking-wide mr-1">Tours:</span>
         {Object.entries(TOUR_COLORS).filter(([k]) => k !== 'Cerrado').map(([status, color]) => (
           <span key={status} className="flex items-center gap-1 text-gray-600">
@@ -157,7 +157,7 @@ export default function CalendarView() {
 
       <div className="flex gap-4">
         {/* Calendar Grid */}
-        <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex-1 transition-all ${selectedDay ? 'lg:flex-[2]' : ''}`}>
+        <div className={`card-premium overflow-hidden flex-1 transition-all ${selectedDay ? 'lg:flex-[2]' : ''}`}>
           {loading ? (
             <div className="flex items-center justify-center h-96">
               <div className="w-8 h-8 border-4 border-turquoise-200 border-t-turquoise-600 rounded-full animate-spin" />
@@ -240,7 +240,7 @@ export default function CalendarView() {
 
         {/* Detail Panel */}
         {selectedDay && (
-          <div className="hidden lg:block w-80 bg-white/80 backdrop-blur-xl rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden self-start sticky top-20">
+          <div className="hidden lg:block w-80 glass rounded-2xl shadow-premium-lg border border-gray-200/50 overflow-hidden self-start sticky top-20 animate-slideInRight">
             {/* Panel Header */}
             <div className="bg-gradient-to-r from-azul-900 to-azul-800 text-white px-4 py-3 flex items-center justify-between">
               <div>
@@ -333,7 +333,7 @@ export default function CalendarView() {
 
       {/* Mobile detail panel */}
       {selectedDay && (
-        <div className="lg:hidden bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="lg:hidden card-premium overflow-hidden animate-fadeInUp">
           <div className="bg-gradient-to-r from-azul-900 to-azul-800 text-white px-4 py-3 flex items-center justify-between">
             <div>
               <p className="font-bold text-sm">{new Date(selectedDay.date + 'T12:00:00').toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long' })}</p>

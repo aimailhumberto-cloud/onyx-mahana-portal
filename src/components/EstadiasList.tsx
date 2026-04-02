@@ -60,9 +60,9 @@ export default function EstadiasList() {
   const totalAll = STATUS_ORDER.reduce((s, k) => s + (statusCounts[k] || 0), 0)
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fadeIn">
       {/* Header — bigger logos */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fadeInDown">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <img src="/caracol-logo.png" alt="Playa Caracol" className="w-14 h-14 rounded-xl object-contain bg-gradient-to-br from-blue-50 to-blue-100 p-1.5 shadow-md ring-1 ring-blue-200/50" />
@@ -78,17 +78,17 @@ export default function EstadiasList() {
             const params = new URLSearchParams()
             if (activeStatus) params.set('estado', activeStatus)
             downloadCSV(`/api/v1/estadias/export?${params}`, `estadias_${new Date().toISOString().split('T')[0]}.csv`)
-          }} className="flex items-center gap-1.5 bg-white text-azul-900 border border-gray-200 px-4 py-2.5 rounded-xl font-medium hover:bg-gray-50 hover:shadow-sm transition-all text-sm">
+          }} className="card-premium-interactive flex items-center gap-1.5 text-azul-800 px-4 py-2.5 font-medium text-sm">
             <Download className="w-4 h-4" /> Exportar
           </button>
-          <button onClick={() => navigate('/estadias/nuevo')} className="bg-gradient-to-r from-purple-600 to-purple-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
+          <button onClick={() => navigate('/estadias/nuevo')} className="bg-gradient-to-r from-purple-600 to-purple-500 text-white px-5 py-2.5 rounded-xl font-medium btn-premium shadow-purple-500/20">
             + Nueva Estadía
           </button>
         </div>
       </div>
 
       {/* Status Pipeline + Leads KPI */}
-      <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+      <div className="card-premium p-4 animate-fadeInUp">
         <div className="grid grid-cols-6 gap-2">
           {STATUS_ORDER.map((status) => {
             const conf = statusConfig[status]
@@ -126,7 +126,7 @@ export default function EstadiasList() {
       </div>
 
       {/* Search */}
-      <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+      <div className="card-premium p-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -150,9 +150,9 @@ export default function EstadiasList() {
       ) : (
         <>
           {/* Desktop Table */}
-          <div className="hidden lg:block bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-            <table className="w-full">
-              <thead className="bg-gray-50/80 border-b border-gray-200">
+          <div className="hidden lg:block card-premium overflow-hidden animate-fadeInUp">
+            <table className="w-full table-premium">
+              <thead>
                 <tr>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
                   <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Propiedad</th>
@@ -167,7 +167,7 @@ export default function EstadiasList() {
                 {estadias.length > 0 ? estadias.map((e, i) => {
                   const conf = statusConfig[e.estado] || statusConfig['Solicitada']
                   return (
-                    <tr key={e.id} className={`hover:bg-purple-50/30 cursor-pointer transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'}`}
+                    <tr key={e.id} className={`cursor-pointer transition-all duration-150 ${i % 2 === 0 ? '' : 'bg-gray-50/30'} hover:bg-purple-50/20`}
                       onClick={() => navigate(`/estadias/${e.id}/editar`)}>
                       <td className="px-4 py-3">
                         <p className="font-medium text-azul-900 text-sm">{e.cliente}</p>
@@ -219,7 +219,7 @@ export default function EstadiasList() {
             {estadias.length > 0 ? estadias.map((e) => {
               const conf = statusConfig[e.estado] || statusConfig['Solicitada']
               return (
-                <div key={e.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md hover:border-purple-200 transition-all"
+                <div key={e.id} className="card-premium-interactive p-4"
                   onClick={() => navigate(`/estadias/${e.id}/editar`)}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="min-w-0">

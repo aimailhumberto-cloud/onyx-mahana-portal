@@ -122,9 +122,9 @@ export default function Facturacion() {
   const { tours, summary, aging, porVendedor } = data
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between animate-fadeInDown">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Facturación / CxC</h1>
           <p className="text-sm text-gray-500">Cuentas por cobrar a partners — por tour</p>
@@ -135,7 +135,7 @@ export default function Facturacion() {
       </div>
 
       {/* Mini Dashboard KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fadeInUp">
         <KpiCard label="Sin Factura" value={fmt(summary.sin_factura)} count={summary.count_sin_factura || 0} color="gray" icon={FileText} />
         <KpiCard label="Pendiente" value={fmt(summary.pendiente)} count={summary.count_pendiente || 0} color="yellow" icon={Clock} />
         <KpiCard label="Enviada al Cobro" value={fmt(summary.enviada)} count={summary.count_enviada || 0} color="blue" icon={Send} />
@@ -144,7 +144,7 @@ export default function Facturacion() {
 
       {/* Aging Report */}
       {(aging.corriente || aging.dias_15_30 || aging.dias_30_60 || aging.dias_60_plus) ? (
-        <div className="bg-white rounded-xl border p-4">
+        <div className="card-premium p-4 animate-fadeInUp">
           <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-orange-500" /> Antigüedad de Cartera Pendiente
           </h3>
@@ -159,7 +159,7 @@ export default function Facturacion() {
 
       {/* Per-vendor summary */}
       {porVendedor.length > 0 && (
-        <div className="bg-white rounded-xl border p-4">
+        <div className="card-premium p-4">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Resumen por Partner</h3>
           <div className="space-y-2">
             {porVendedor.map(v => (
@@ -176,7 +176,7 @@ export default function Facturacion() {
       )}
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border p-4">
+      <div className="card-premium p-4">
         <div className="flex flex-wrap items-center gap-3">
           <Filter className="w-4 h-4 text-gray-400" />
           <select value={filter.cxc_estatus} onChange={e => setFilter({ ...filter, cxc_estatus: e.target.value })}
@@ -204,11 +204,11 @@ export default function Facturacion() {
       </div>
 
       {/* Tours Table */}
-      <div className="bg-white rounded-xl border overflow-hidden">
+      <div className="card-premium overflow-hidden animate-fadeInUp">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b">
+              <tr className="bg-gradient-to-b from-gray-50 to-gray-100/50 border-b-2 border-gray-200">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Fecha</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Actividad</th>
@@ -226,7 +226,7 @@ export default function Facturacion() {
                 const isExpanded = expandedId === tour.id
                 return (
                   <>
-                    <tr key={tour.id} className="border-b hover:bg-gray-50 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : tour.id)}>
+                    <tr key={tour.id} className="border-b hover:bg-turquoise-50/20 cursor-pointer transition-all duration-150" onClick={() => setExpandedId(isExpanded ? null : tour.id)}>
                       <td className="px-4 py-3">{tour.fecha}</td>
                       <td className="px-4 py-3 font-medium">{tour.cliente}</td>
                       <td className="px-4 py-3">{tour.actividad}</td>
@@ -280,7 +280,7 @@ function KpiCard({ label, value, count, color, icon: Icon }: { label: string; va
     green: 'bg-green-50 border-green-200 text-green-700',
   }
   return (
-    <div className={`rounded-xl border p-4 ${colorMap[color]}`}>
+    <div className={`rounded-xl border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-premium ${colorMap[color]}`}>
       <div className="flex items-center gap-2 mb-1">
         <Icon className="w-4 h-4" />
         <span className="text-xs font-medium uppercase">{label}</span>
@@ -437,8 +437,8 @@ function EmailModal({ preview, sending, onSend, onClose }: {
   const [showPreview, setShowPreview] = useState(false)
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-premium-xl w-full max-w-lg max-h-[90vh] overflow-auto modal-content" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-50 to-blue-50 rounded-t-2xl">
           <div className="flex items-center gap-2">

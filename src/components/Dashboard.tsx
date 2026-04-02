@@ -84,12 +84,23 @@ export default function Dashboard() {
     loadAll(mes)
   }
 
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-turquoise-600" /></div>
+  if (loading) return (
+    <div className="flex items-center justify-center h-64 animate-fadeIn">
+      <div className="text-center">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-turquoise-400 to-turquoise-600 flex items-center justify-center mx-auto mb-3 animate-float shadow-glow-turquoise">
+          <Loader2 className="w-6 h-6 animate-spin text-white" />
+        </div>
+        <p className="text-gray-400 text-sm">Cargando dashboard...</p>
+      </div>
+    </div>
+  )
   if (error || !data) return (
-    <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-      <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-4" />
+    <div className="card-premium p-8 text-center animate-fadeInUp">
+      <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-4">
+        <AlertCircle className="w-7 h-7 text-red-500" />
+      </div>
       <p className="text-gray-500 mb-4">{error}</p>
-      <button onClick={() => window.location.reload()} className="px-4 py-2 bg-turquoise-600 text-white rounded-lg">Reintentar</button>
+      <button onClick={() => window.location.reload()} className="px-5 py-2.5 bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white rounded-xl font-medium hover:shadow-glow-turquoise transition-all btn-premium">Reintentar</button>
     </div>
   )
 
@@ -98,11 +109,12 @@ export default function Dashboard() {
   const leadsAbiertos = charts?.leadsAbiertos || { cantidad: 0, monto: 0 }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {/* Brand Header with integrated Month Filter */}
-      <div className="bg-gradient-to-r from-azul-900 via-azul-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white">
-        <div className="flex items-center gap-4">
-          <img src="/mahana-logo.jpg" alt="Mahana Tours" className="w-14 h-14 rounded-xl object-cover shadow-lg ring-2 ring-white/20" />
+      <div className="bg-gradient-to-r from-azul-900 via-azul-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white relative overflow-hidden animate-fadeInDown">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-turquoise-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
+        <div className="flex items-center gap-4 relative">
+          <img src="/mahana-logo.jpg" alt="Mahana Tours" className="w-14 h-14 rounded-xl object-cover shadow-lg ring-2 ring-turquoise-400/30" />
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold">Portal de Reservas</h1>
             <p className="text-gray-300 text-xs">Mahana Tours — Panamá</p>
@@ -129,7 +141,7 @@ export default function Dashboard() {
               <ChevronDown className="w-3 h-3 text-gray-300" />
             </button>
             {showMonthPicker && (
-              <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-xl border border-gray-100 z-20 max-h-64 overflow-y-auto">
+              <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-premium-xl border border-gray-100/80 z-20 max-h-64 overflow-y-auto animate-fadeInDown">
                 <button onClick={() => handleMonthChange('todo')}
                   className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-50 ${selectedMonth === 'todo' ? 'font-semibold text-turquoise-600 bg-turquoise-50' : 'text-gray-700'}`}>
                   📅 Todo el historial
@@ -154,17 +166,17 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid — compact */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Tours Hoy', value: data.resumen.tours_hoy.toString(), icon: Calendar, color: 'bg-turquoise-500', tc: '' },
-          { label: 'Ingresos Total', value: fmt(ingresosTotalConEstadias), icon: DollarSign, color: 'bg-green-500', tc: 'text-green-600' },
-          { label: 'Ganancia Tours', value: fmt(data.resumen.ganancia_total), icon: TrendingUp, color: 'bg-arena-500', tc: 'text-arena-600' },
-          { label: 'Comisiones Estadías', value: fmt(estadiasComisiones), icon: Building2, color: 'bg-purple-500', tc: 'text-purple-600' },
-        ].map((s) => (
-          <div key={s.label} className="bg-white rounded-xl shadow-sm px-3 py-3 border border-gray-100">
-            <div className="flex items-center gap-2 mb-1">
-              <div className={`${s.color} p-1.5 rounded-md`}><s.icon className="w-3.5 h-3.5 text-white" /></div>
-              <span className="text-[10px] text-gray-500 uppercase font-medium">{s.label}</span>
+          { label: 'Tours Hoy', value: data.resumen.tours_hoy.toString(), icon: Calendar, color: 'bg-turquoise-500', glow: 'shadow-turquoise-500/10', tc: '', gradient: 'from-turquoise-50 to-white' },
+          { label: 'Ingresos Total', value: fmt(ingresosTotalConEstadias), icon: DollarSign, color: 'bg-green-500', glow: 'shadow-green-500/10', tc: 'text-green-600', gradient: 'from-green-50 to-white' },
+          { label: 'Ganancia Tours', value: fmt(data.resumen.ganancia_total), icon: TrendingUp, color: 'bg-arena-500', glow: 'shadow-arena-500/10', tc: 'text-arena-600', gradient: 'from-arena-50 to-white' },
+          { label: 'Comisiones Estadías', value: fmt(estadiasComisiones), icon: Building2, color: 'bg-purple-500', glow: 'shadow-purple-500/10', tc: 'text-purple-600', gradient: 'from-purple-50 to-white' },
+        ].map((s, i) => (
+          <div key={s.label} className={`bg-gradient-to-br ${s.gradient} rounded-xl shadow-premium-sm hover:shadow-premium px-3 py-3 border border-gray-100/80 transition-all duration-300 hover:-translate-y-0.5 animate-fadeInUp stagger-${i + 1}`}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className={`${s.color} p-1.5 rounded-lg shadow-sm`}><s.icon className="w-3.5 h-3.5 text-white" /></div>
+              <span className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">{s.label}</span>
             </div>
             <p className={`text-xl font-bold ${s.tc || 'text-azul-900'}`}>{s.value}</p>
           </div>
@@ -172,8 +184,8 @@ export default function Dashboard() {
       </div>
 
       {/* Three-column: Mahana + Partners + Estadías — logos on the right */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <div className="bg-white rounded-xl shadow-sm px-4 py-3 border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="card-premium px-4 py-3 animate-fadeInUp stagger-1">
           <div className="flex items-center justify-between mb-1.5">
             <div>
               <h3 className="text-sm font-semibold text-azul-900">Mahana Tours</h3>
@@ -188,7 +200,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm px-4 py-3 border border-gray-100">
+        <div className="card-premium px-4 py-3 animate-fadeInUp stagger-2">
           <div className="flex items-center justify-between mb-1.5">
             <div>
               <h3 className="text-sm font-semibold text-azul-900">Playa Caracol</h3>
@@ -203,7 +215,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm px-4 py-3 border border-gray-100">
+        <div className="card-premium px-4 py-3 animate-fadeInUp stagger-3">
           <div className="flex items-center justify-between mb-1.5">
             <div>
               <h3 className="text-sm font-semibold text-azul-900">Estadías</h3>
@@ -225,9 +237,9 @@ export default function Dashboard() {
 
       {/* Charts — compact */}
       {charts && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {charts.ingresosPorMes.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div className="card-premium p-4 animate-fadeInUp">
               <h3 className="text-sm font-semibold text-azul-900 mb-2">Ingresos por Mes</h3>
               <ResponsiveContainer width="100%" height={170}>
                 <BarChart data={charts.ingresosPorMes} margin={{ top: 5, right: 5, left: -10, bottom: 5 }}>
@@ -247,7 +259,7 @@ export default function Dashboard() {
           )}
 
           {charts.porActividad.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+            <div className="card-premium p-4 animate-fadeInUp">
               <h3 className="text-sm font-semibold text-azul-900 mb-2">Distribución por Actividad</h3>
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <ResponsiveContainer width={150} height={150}>
@@ -282,7 +294,7 @@ export default function Dashboard() {
       )}
 
       {/* Recent Activity — 3 items max */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="card-premium overflow-hidden animate-fadeInUp">
         <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-azul-900">Actividad Reciente</h2>
           <span className="text-[10px] text-gray-400">Últimas 3</span>
@@ -315,17 +327,17 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white py-2.5 px-3 rounded-xl text-sm font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 animate-fadeInUp">
+        <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white py-2.5 px-3 rounded-xl text-sm font-medium btn-premium shadow-glow-turquoise/50">
           + Nuevo Tour
         </button>
-        <button onClick={() => navigate('/estadias/nuevo')} className="bg-gradient-to-r from-purple-600 to-purple-500 text-white py-2.5 px-3 rounded-xl text-sm font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
+        <button onClick={() => navigate('/estadias/nuevo')} className="bg-gradient-to-r from-purple-600 to-purple-500 text-white py-2.5 px-3 rounded-xl text-sm font-medium btn-premium shadow-purple-500/20">
           + Nueva Estadía
         </button>
-        <button onClick={() => navigate('/tours')} className="bg-white border border-gray-200 text-azul-900 py-2.5 px-3 rounded-xl text-sm font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-1">
+        <button onClick={() => navigate('/tours')} className="card-premium-interactive py-2.5 px-3 text-sm font-medium flex items-center justify-center gap-1.5 text-azul-800">
           Ver Tours <ArrowRight className="w-3.5 h-3.5" />
         </button>
-        <button onClick={() => navigate('/estadias')} className="bg-white border border-gray-200 text-azul-900 py-2.5 px-3 rounded-xl text-sm font-medium hover:bg-gray-50 transition-all flex items-center justify-center gap-1">
+        <button onClick={() => navigate('/estadias')} className="card-premium-interactive py-2.5 px-3 text-sm font-medium flex items-center justify-center gap-1.5 text-azul-800">
           Ver Estadías <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>

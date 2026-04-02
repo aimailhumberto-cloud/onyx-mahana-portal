@@ -187,14 +187,14 @@ export default function ToursList() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 animate-fadeIn">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fadeInDown">
         <div className="flex items-center gap-3">
-          <img src="/mahana-logo.jpg" alt="Mahana Tours" className="w-11 h-11 rounded-xl object-cover shadow-sm ring-1 ring-gray-200" />
+          <img src="/mahana-logo.jpg" alt="Mahana Tours" className="w-11 h-11 rounded-xl object-cover shadow-premium-sm ring-2 ring-turquoise-400/20" />
           <div>
             <h1 className="text-2xl font-bold text-azul-900">Tours</h1>
-            <p className="text-sm text-gray-500">{meta.total} reservas</p>
+            <p className="text-sm text-gray-400">{meta.total} reservas</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -205,23 +205,23 @@ export default function ToursList() {
             if (range.hasta) params.set('fecha_hasta', range.hasta)
             if (activeStatus) params.set('estatus', activeStatus)
             downloadCSV(`/api/v1/tours/export?${params}`, `tours_${new Date().toISOString().split('T')[0]}.csv`)
-          }} className="flex items-center gap-1.5 bg-white text-azul-900 border border-gray-200 px-4 py-2.5 rounded-xl font-medium hover:bg-gray-50 hover:shadow-sm transition-all text-sm">
+          }} className="card-premium-interactive flex items-center gap-1.5 text-azul-800 px-4 py-2.5 font-medium text-sm">
             <Download className="w-4 h-4" /> Exportar
           </button>
-          <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white px-5 py-2.5 rounded-xl font-medium hover:shadow-lg hover:scale-[1.02] transition-all">
+          <button onClick={() => navigate('/tours/nuevo')} className="bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white px-5 py-2.5 rounded-xl font-medium btn-premium shadow-glow-turquoise">
             + Nueva Reserva
           </button>
         </div>
       </div>
 
       {/* Period + KPIs + Filters */}
-      <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100 space-y-4">
+      <div className="card-premium p-4 space-y-4 animate-fadeInUp">
         {/* Period Pills */}
-        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+        <div className="flex items-center gap-1 bg-gray-100/80 rounded-xl p-1">
           {PERIODS.map((p) => (
             <button key={p.key} onClick={() => setActivePeriod(p.key)}
-              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                activePeriod === p.key ? 'bg-white text-azul-900 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:text-gray-700'
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                activePeriod === p.key ? 'bg-white text-azul-900 shadow-premium-sm ring-1 ring-gray-200/80' : 'text-gray-400 hover:text-gray-600'
               }`}>{p.label}</button>
           ))}
         </div>
@@ -278,43 +278,52 @@ export default function ToursList() {
 
       {/* Content */}
       {loading ? (
-        <div className="flex items-center justify-center h-40"><Loader2 className="w-8 h-8 animate-spin text-turquoise-600" /></div>
+        <div className="flex items-center justify-center h-40 animate-fadeIn">
+          <div className="text-center">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-turquoise-400 to-turquoise-600 flex items-center justify-center mx-auto mb-2 animate-float shadow-glow-turquoise">
+              <Loader2 className="w-5 h-5 animate-spin text-white" />
+            </div>
+            <p className="text-gray-400 text-xs">Cargando tours...</p>
+          </div>
+        </div>
       ) : error ? (
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-          <AlertCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+        <div className="card-premium p-8 text-center animate-fadeInUp">
+          <div className="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-3">
+            <AlertCircle className="w-6 h-6 text-red-500" />
+          </div>
           <p className="text-gray-500 mb-4">{error}</p>
-          <button onClick={() => loadTours()} className="px-4 py-2 bg-turquoise-600 text-white rounded-lg">Reintentar</button>
+          <button onClick={() => loadTours()} className="px-5 py-2.5 bg-gradient-to-r from-turquoise-600 to-turquoise-500 text-white rounded-xl font-medium btn-premium">Reintentar</button>
         </div>
       ) : (
         <>
           {/* Desktop Table */}
-          <div className="hidden lg:block bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
-            <table className="w-full">
-              <thead className="bg-gray-50/80 border-b border-gray-200">
+          <div className="hidden lg:block card-premium overflow-hidden animate-fadeInUp">
+            <table className="w-full table-premium">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Cliente</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Actividad</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Fecha</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Responsable</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Estado</th>
-                  <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Origen</th>
-                  <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ingreso</th>
-                  <th className="px-4 py-3 text-right text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Ganancia</th>
-                  <th className="px-4 py-3 w-8"></th>
+                  <th className="text-left">Cliente</th>
+                  <th className="text-left">Actividad</th>
+                  <th className="text-left">Fecha</th>
+                  <th className="text-left">Responsable</th>
+                  <th className="text-left">Estado</th>
+                  <th className="text-left">Origen</th>
+                  <th className="text-right">Ingreso</th>
+                  <th className="text-right">Ganancia</th>
+                  <th className="w-8"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-50">
+              <tbody className="divide-y divide-gray-100/60">
                 {tours.length > 0 ? tours.map((t, i) => {
                   const conf = statusConfig[t.estatus] || statusConfig['Cerrado']
                   return (
                     <React.Fragment key={t.id}>
-                    <tr className={`hover:bg-turquoise-50/30 cursor-pointer transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/30'} ${expandedTourId === t.id ? 'bg-blue-50/40' : ''}`}
+                    <tr className={`cursor-pointer transition-all duration-150 ${i % 2 === 0 ? '' : 'bg-gray-50/30'} ${expandedTourId === t.id ? 'bg-turquoise-50/40 shadow-sm' : 'hover:bg-turquoise-50/20'}`}
                       onClick={() => {
                         handleExpandToggle(t)
                       }}>
                       <td className="px-4 py-3">
-                        <p className="font-medium text-azul-900 text-sm">{t.cliente}</p>
-                        {t.whatsapp && <p className="text-[11px] text-gray-400">{t.whatsapp}</p>}
+                        <p className="font-semibold text-azul-900 text-sm">{t.cliente}</p>
+                        {t.whatsapp && <p className="text-[11px] text-gray-400 font-mono">{t.whatsapp}</p>}
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-1 text-sm text-gray-700">
@@ -361,7 +370,7 @@ export default function ToursList() {
                     {expandedTourId === t.id && (
                       <tr>
                         <td colSpan={9} className="px-0 py-0">
-                          <div className="bg-gradient-to-r from-blue-50/60 to-orange-50/40 border-t border-b border-blue-100 px-6 py-5">
+                          <div className="bg-gradient-to-r from-turquoise-50/40 via-white to-blue-50/30 border-t-2 border-b border-turquoise-200/30 px-6 py-5 animate-slideDown">
                             {detailLoading ? (
                               <div className="flex items-center justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-blue-500" /></div>
                             ) : expandedDetail ? (
@@ -500,7 +509,7 @@ export default function ToursList() {
             {tours.length > 0 ? tours.map((t) => {
               const conf = statusConfig[t.estatus] || statusConfig['Cerrado']
               return (
-                <div key={t.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 cursor-pointer hover:shadow-md hover:border-turquoise-200 transition-all"
+                <div key={t.id} className="card-premium-interactive p-4"
                   onClick={() => navigate(`/tours/${t.id}/editar`)}>
                   <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2 min-w-0">
@@ -538,7 +547,10 @@ export default function ToursList() {
                 </div>
               )
             }) : (
-              <div className="bg-white rounded-xl shadow-sm p-10 text-center text-gray-400 text-sm">No hay tours en este período</div>
+              <div className="card-premium p-10 text-center animate-fadeIn">
+                <Calendar className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">No hay tours en este período</p>
+              </div>
             )}
           </div>
 
@@ -561,8 +573,8 @@ export default function ToursList() {
 
       {/* Reject Modal */}
       {rejectModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setRejectModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4" onClick={() => setRejectModal(null)}>
+          <div className="bg-white rounded-2xl shadow-premium-xl max-w-md w-full p-6 modal-content" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold text-gray-900 mb-1">Rechazar Tour</h3>
             <p className="text-sm text-gray-500 mb-4">Tour de <strong>{rejectModal.cliente}</strong></p>
             <textarea
@@ -588,8 +600,8 @@ export default function ToursList() {
 
       {/* Delete Confirmation Modal */}
       {deleteModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteModal(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4" onClick={() => setDeleteModal(null)}>
+          <div className="bg-white rounded-2xl shadow-premium-xl max-w-md w-full p-6 modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-100 rounded-full"><Trash2 className="w-5 h-5 text-red-600" /></div>
               <div>
