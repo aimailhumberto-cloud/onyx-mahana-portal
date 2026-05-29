@@ -181,6 +181,17 @@ function getDb() {
       );
     `);
 
+    // ── Scheduler Executions table ──
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS scheduler_executions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        job_name TEXT NOT NULL,
+        execution_date TEXT NOT NULL,
+        executed_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(job_name, execution_date)
+      );
+    `);
+
     // Rename Cancelada → Perdida in existing data
     db.prepare(`UPDATE reservas_estadias SET estado = 'Perdida' WHERE estado = 'Cancelada'`).run();
 

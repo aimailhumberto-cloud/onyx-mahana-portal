@@ -41,13 +41,6 @@ function decodeToken(token) {
 // ── Middleware: require authenticated user ──
 
 function requireAuth(req, res, next) {
-  // Also accept API key for backward compatibility (OpenClaw, etc.)
-  const apiKey = req.headers['x-api-key'];
-  if (apiKey && apiKey === (process.env.API_KEY || 'mahana-dev-key-2026')) {
-    req.user = { id: 0, email: 'api', rol: 'admin', vendedor: null, nombre: 'API' };
-    return next();
-  }
-
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({

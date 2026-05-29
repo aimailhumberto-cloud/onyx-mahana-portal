@@ -27,6 +27,7 @@ import ReviewPage from './components/ReviewPage'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './components/Toast'
 import { Loader2 } from 'lucide-react'
+import PremiumDemo from './components/PremiumDemo'
 
 function AppRoutes() {
   const { user, loading, isAdmin, isPartner } = useAuth()
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/booking/:slug" element={<BookingPage />} />
         <Route path="/resena/:codigo" element={<ReviewPage />} />
+        <Route path="/premium-demo" element={<PremiumDemo />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
@@ -72,6 +74,7 @@ function AppRoutes() {
         </Route>
         <Route path="/resena/:codigo" element={<ReviewPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/premium-demo" element={<PremiumDemo />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     )
@@ -106,6 +109,7 @@ function AppRoutes() {
       <Route path="/booking/:slug" element={<BookingPage />} />
       <Route path="/resena/:codigo" element={<ReviewPage />} />
       <Route path="/login" element={<Navigate to="/" replace />} />
+      <Route path="/premium-demo" element={<PremiumDemo />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

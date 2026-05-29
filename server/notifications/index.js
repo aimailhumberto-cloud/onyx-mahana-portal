@@ -341,11 +341,21 @@ async function onEstadiaStatusChanged(estadia, oldStatus, newStatus) {
 // ── Scheduled Notifications ──
 
 async function sendDailyReminders(db) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
-  
+  const jobName = 'daily_reminders';
+  const now = new Date();
+  const panamaDate = new Date(now.getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0];
+
   try {
+    const existing = db.prepare('SELECT id FROM scheduler_executions WHERE job_name = ? AND execution_date = ?').get(jobName, panamaDate);
+    if (existing) {
+      console.log(`⏰ Daily job "${jobName}" already executed for date ${panamaDate}. Skipping.`);
+      return { skipped: true };
+    }
+
+    const panamaDateObj = new Date(now.getTime() - 5 * 60 * 60 * 1000);
+    const tomorrowObj = new Date(panamaDateObj.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowStr = tomorrowObj.toISOString().split('T')[0];
+
     const tours = db.prepare(`
       SELECT rt.*, a.nombre as actividad_nombre, a.punto_encuentro
       FROM reservas_tours rt
@@ -378,6 +388,8 @@ async function sendDailyReminders(db) {
       }
     }
     
+    db.prepare('INSERT INTO scheduler_executions (job_name, execution_date) VALUES (?, ?)').run(jobName, panamaDate);
+
     console.log(`🔔 Reminders: ${emailSent} emails, ${waSent} WhatsApp / ${tours.length} tours`);
     return { total: tours.length, emailSent, waSent };
   } catch (err) {
@@ -387,9 +399,19 @@ async function sendDailyReminders(db) {
 }
 
 async function sendDailySummary(db, toEmail) {
-  const today = new Date().toISOString().split('T')[0];
-  
+  const jobName = 'daily_summary';
+  const now = new Date();
+  const panamaDate = new Date(now.getTime() - 5 * 60 * 60 * 1000).toISOString().split('T')[0];
+
   try {
+    const existing = db.prepare('SELECT id FROM scheduler_executions WHERE job_name = ? AND execution_date = ?').get(jobName, panamaDate);
+    if (existing) {
+      console.log(`⏰ Daily job "${jobName}" already executed for date ${panamaDate}. Skipping.`);
+      return { skipped: true };
+    }
+
+    const today = panamaDate;
+    
     const tours = db.prepare(`
       SELECT rt.*, a.nombre as actividad_nombre
       FROM reservas_tours rt
@@ -424,6 +446,8 @@ async function sendDailySummary(db, toEmail) {
     } catch (err) {
       results.telegram = { success: false, error: err.message };
     }
+
+    db.prepare('INSERT INTO scheduler_executions (job_name, execution_date) VALUES (?, ?)').run(jobName, panamaDate);
 
     console.log(`🔔 Daily summary: ${tours.length} tours, $${totalIngresos}`);
     return results;
