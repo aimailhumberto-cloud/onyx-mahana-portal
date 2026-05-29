@@ -54,7 +54,7 @@ app.use(whatsappRouter);
 app.use(feedbackRouter);
 
 // Frontend assets & SPA fallback
-const distPath = path.join(__dirname, '../client/dist');
+const distPath = path.join(__dirname, '../dist');
 if (fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'))) {
   console.log('✅ Frontend found at:', distPath);
   app.use(express.static(distPath));
