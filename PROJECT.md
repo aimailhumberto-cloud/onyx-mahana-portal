@@ -82,3 +82,16 @@ All route responses must follow this standard format:
   - `execution_date`: `TEXT` (Format: `'YYYY-MM-DD'`)
   - `executed_at`: `TEXT` (Format: `'YYYY-MM-DD HH:MM:SS'`)
 - **Index**: `CREATE UNIQUE INDEX idx_job_date ON scheduler_executions (job_name, execution_date)`
+
+---
+
+## Git & Deployment Notes for Future Agents
+
+> [!IMPORTANT]
+> **Authentication & Git Push:**
+> The user's system runs on Windows with Git Credential Manager (`credential.helper=manager`) caching multiple GitHub accounts (specifically `aimailhumberto-cloud` and `lumenai17-ui`).
+> To push successfully without 403 authorization errors or requiring interactive login popups:
+> 1. Ensure the remote `origin` URL explicitly contains the `aimailhumberto-cloud` username:
+>    `https://aimailhumberto-cloud@github.com/aimailhumberto-cloud/onyx-mahana-portal.git`
+> 2. Execute `git push` directly in the local shell. The Windows Credential Manager will automatically use the cached credentials for `aimailhumberto-cloud` and complete the operation silently.
+
