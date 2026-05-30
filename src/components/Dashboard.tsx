@@ -111,7 +111,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       {/* Brand Header with integrated Month Filter */}
-      <div className="bg-gradient-to-r from-azul-900 via-azul-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white relative animate-fadeInDown">
+      <div className="bg-gradient-to-r from-azul-900 via-azul-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white relative z-30 animate-fadeInDown">
         {/* Absolute container with overflow-hidden to crop background glow inside rounded borders */}
         <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
           <div className="absolute top-0 right-0 w-64 h-64 bg-turquoise-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>

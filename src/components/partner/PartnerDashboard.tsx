@@ -79,7 +79,7 @@ export default function PartnerDashboard() {
   return (
     <div className="space-y-3">
       {/* Brand Header with integrated Month Filter — same as admin */}
-      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white">
+      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white relative z-30">
         <div className="flex items-center gap-4">
           <img src="/caracol-logo.png" alt="Playa Caracol" className="w-14 h-14 rounded-xl object-contain bg-white p-1 shadow-lg ring-2 ring-white/20" />
           <div className="flex-1 min-w-0">
