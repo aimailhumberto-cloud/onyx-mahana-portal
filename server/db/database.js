@@ -476,6 +476,9 @@ function findAll(table, { where = {}, orderBy = 'id DESC', page = 1, limit = 50 
       } else if (key.endsWith('_like')) {
         conditions.push(`${key.replace('_like', '')} LIKE ?`);
         values.push(`%${value}%`);
+      } else if (key.endsWith('_not')) {
+        conditions.push(`${key.replace('_not', '')} != ?`);
+        values.push(value);
       } else {
         conditions.push(`${key} = ?`);
         values.push(value);
