@@ -111,9 +111,12 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       {/* Brand Header with integrated Month Filter */}
-      <div className="bg-gradient-to-r from-azul-900 via-azul-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white relative overflow-hidden animate-fadeInDown">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-turquoise-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
-        <div className="flex items-center gap-4 relative">
+      <div className="bg-gradient-to-r from-azul-900 via-azul-800 to-[#1a2744] rounded-2xl px-5 py-4 text-white relative animate-fadeInDown">
+        {/* Absolute container with overflow-hidden to crop background glow inside rounded borders */}
+        <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-turquoise-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
+        </div>
+        <div className="flex items-center gap-4 relative z-10">
           <img src="/mahana-logo.jpg" alt="Mahana Tours" className="w-14 h-14 rounded-xl object-cover shadow-lg ring-2 ring-turquoise-400/30" />
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-bold">Portal de Reservas</h1>
