@@ -10,50 +10,14 @@ if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
 const DB_PATH = path.join(DB_DIR, 'mahana.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
-// If running in Render with persistent disk /data, ensure DB is healthy and synchronized
+// If running in Render with persistent disk /data, always guarantee a clean sync from repo
 if (DB_DIR === '/data' && fs.existsSync(LOCAL_DATA_DB)) {
   try {
-    let shouldCopy = false;
-    if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size < 1000) {
-      shouldCopy = true;
-    } else {
-      try {
-        const diskDb = new Database(DB_PATH);
-        // Check for corruption / orphan index
-        const check = diskDb.pragma('quick_check');
-        const isOk = Array.isArray(check) && check[0]?.quick_check === 'ok';
-        
-        if (!isOk) {
-          console.warn('⚠️ Disk DB failed integrity check, forcing overwrite from repo...');
-          diskDb.close();
-          shouldCopy = true;
-        } else {
-          const repoDb = new Database(LOCAL_DATA_DB, { readonly: true });
-          const countDisk = diskDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get()?.total || 0;
-          const countRepo = repoDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get()?.total || 0;
-          const usersDisk = diskDb.prepare("SELECT COUNT(*) as total FROM usuarios").get()?.total || 0;
-          
-          diskDb.close();
-          repoDb.close();
-          
-          console.log(`📊 DB Check on start: Disk (${countDisk} tours, ${usersDisk} users) vs Repo (${countRepo} tours)`);
-          if (countRepo > countDisk || usersDisk === 0) {
-            shouldCopy = true;
-          }
-        }
-      } catch (checkErr) {
-        console.warn('⚠️ Disk DB is malformed or corrupted (' + checkErr.message + '), forcing overwrite from clean repo DB...');
-        shouldCopy = true;
-      }
-    }
-    if (shouldCopy) {
-      console.log('📦 Updating /data/mahana.db with clean full dataset from repository...');
-      // Remove any WAL / SHM files if present to prevent orphan index issues
-      try { fs.unlinkSync(DB_PATH + '-wal'); } catch {}
-      try { fs.unlinkSync(DB_PATH + '-shm'); } catch {}
-      fs.copyFileSync(LOCAL_DATA_DB, DB_PATH);
-      console.log('✅ /data/mahana.db successfully updated from repository!');
-    }
+    console.log('📦 Updating /data/mahana.db directly from repository DB...');
+    try { fs.unlinkSync(DB_PATH + '-wal'); } catch {}
+    try { fs.unlinkSync(DB_PATH + '-shm'); } catch {}
+    fs.copyFileSync(LOCAL_DATA_DB, DB_PATH);
+    console.log('✅ /data/mahana.db successfully synchronized from repository!');
   } catch (seedErr) {
     console.error('⚠️ Warning checking persistent disk seed:', seedErr.message);
   }
