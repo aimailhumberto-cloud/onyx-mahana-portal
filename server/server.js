@@ -92,8 +92,8 @@ app.listen(PORT, async () => {
     const count = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
     if (count.c === 0) {
       const bcrypt = require('bcryptjs');
-      const adminPass = process.env.SEED_ADMIN_PASSWORD || 'change-me-immediately';
-      const partnerPass = process.env.SEED_PARTNER_PASSWORD || 'change-me-immediately';
+      const adminPass = process.env.SEED_ADMIN_PASSWORD || 'mahana2026';
+      const partnerPass = process.env.SEED_PARTNER_PASSWORD || 'caracol2026';
       if (process.env.NODE_ENV === 'production' && (!process.env.SEED_ADMIN_PASSWORD || !process.env.SEED_PARTNER_PASSWORD)) {
         console.warn('⚠️  WARNING: Using default seed passwords. Set SEED_ADMIN_PASSWORD and SEED_PARTNER_PASSWORD env vars.');
       }
