@@ -4,10 +4,38 @@ const path = require('path');
 const { hashPassword } = require('../auth');
 
 // Use Render persistent disk at /data if available; otherwise local data/ folder
+const LOCAL_DATA_DB = path.join(__dirname, '../../data/mahana.db');
 const DB_DIR = fs.existsSync('/data') ? '/data' : path.join(__dirname, '../../data');
 if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
 const DB_PATH = path.join(DB_DIR, 'mahana.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+
+// If running in Render with persistent disk /data, copy repo data if disk DB is new or empty
+if (DB_DIR === '/data' && fs.existsSync(LOCAL_DATA_DB)) {
+  try {
+    let shouldCopy = false;
+    if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size < 1000) {
+      shouldCopy = true;
+    } else {
+      const tempDb = new Database(DB_PATH, { readonly: true });
+      const c = tempDb.prepare("SELECT COUNT(*) as n FROM sqlite_master WHERE type='table' AND name='reservas_tours'").get();
+      if (!c || c.n === 0) {
+        shouldCopy = true;
+      } else {
+        const countRows = tempDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get();
+        if (!countRows || countRows.total === 0) shouldCopy = true;
+      }
+      tempDb.close();
+    }
+    if (shouldCopy) {
+      console.log('📦 Seeding /data/mahana.db with updated data from repository...');
+      fs.copyFileSync(LOCAL_DATA_DB, DB_PATH);
+      console.log('✅ /data/mahana.db successfully seeded from repository!');
+    }
+  } catch (seedErr) {
+    console.error('⚠️ Warning checking persistent disk seed:', seedErr.message);
+  }
+}
 
 let db;
 
