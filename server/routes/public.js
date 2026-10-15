@@ -101,16 +101,20 @@ router.post('/api/v1/auth/login', (req, res) => {
     }
 
     const db = getDb();
-    const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get(email.toLowerCase().trim());
+    const cleanEmail = email.toLowerCase().trim();
+    const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get(cleanEmail);
     if (!user) {
+      console.warn(`[AUTH] Login failed: User not found or inactive for ${cleanEmail}`);
       return error(res, 'AUTH_FAILED', 'Credenciales inválidas', 401);
     }
 
     if (!verifyPassword(password, user.password_hash)) {
+      console.warn(`[AUTH] Login failed: Password mismatch for ${cleanEmail}`);
       return error(res, 'AUTH_FAILED', 'Credenciales inválidas', 401);
     }
 
     const token = generateToken(user);
+    console.log(`[AUTH] Login successful for ${cleanEmail} (role: ${user.rol})`);
     success(res, {
       token,
       user: {
@@ -122,8 +126,8 @@ router.post('/api/v1/auth/login', (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Login error:', err);
-    error(res, 'SERVER_ERROR', 'Error en login', 500);
+    console.error('Login error details:', err.stack || err.message || err);
+    error(res, 'SERVER_ERROR', `Error en login: ${err.message}`, 500);
   }
 });
 

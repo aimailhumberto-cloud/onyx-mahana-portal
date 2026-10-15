@@ -86,27 +86,29 @@ app.listen(PORT, async () => {
   console.log(`🚀 Mahana Portal v2 running on port ${PORT}`);
   console.log(`📡 API: http://localhost:${PORT}/api/v1/api-status`);
 
-  // Seed users only if table is empty — passwords read from env vars
+  // Ensure default admin and partner users always exist and have verified hashes
   try {
     const db = getDb();
-    const count = db.prepare('SELECT COUNT(*) as c FROM usuarios').get();
-    if (count.c === 0) {
-      const bcrypt = require('bcryptjs');
-      const adminPass = process.env.SEED_ADMIN_PASSWORD || 'mahana2026';
-      const partnerPass = process.env.SEED_PARTNER_PASSWORD || 'caracol2026';
-      if (process.env.NODE_ENV === 'production' && (!process.env.SEED_ADMIN_PASSWORD || !process.env.SEED_PARTNER_PASSWORD)) {
-        console.warn('⚠️  WARNING: Using default seed passwords. Set SEED_ADMIN_PASSWORD and SEED_PARTNER_PASSWORD env vars.');
+    const bcrypt = require('bcryptjs');
+    const adminPass = process.env.SEED_ADMIN_PASSWORD || 'mahana2026';
+    const partnerPass = process.env.SEED_PARTNER_PASSWORD || 'caracol2026';
+    const h1 = bcrypt.hashSync(adminPass, 10);
+    const h2 = bcrypt.hashSync(partnerPass, 10);
+
+    const upsertUser = (email, hash, nombre, rol, vendedor) => {
+      const existing = db.prepare('SELECT id FROM usuarios WHERE email = ?').get(email);
+      if (existing) {
+        db.prepare('UPDATE usuarios SET password_hash = ?, nombre = ?, rol = ?, activo = 1 WHERE id = ?').run(hash, nombre, rol, existing.id);
+      } else {
+        db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor, activo) VALUES (?, ?, ?, ?, ?, 1)').run(email, hash, nombre, rol, vendedor);
       }
-      const h1 = bcrypt.hashSync(adminPass, 10);
-      const h2 = bcrypt.hashSync(partnerPass, 10);
-      db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('admin@mahana.com', h1, 'Mahana Admin', 'admin', null);
-      db.prepare('INSERT INTO usuarios (email, password_hash, nombre, rol, vendedor) VALUES (?, ?, ?, ?, ?)').run('caracol@playacaracol.com', h2, 'Playa Caracol', 'partner', 'Playa Caracol');
-      console.log('✅ Users seeded at startup: 2 users');
-    } else {
-      console.log(`✅ Users table already has ${count.c} users, skipping seed`);
-    }
+    };
+
+    upsertUser('admin@mahana.com', h1, 'Mahana Admin', 'admin', null);
+    upsertUser('caracol@playacaracol.com', h2, 'Playa Caracol', 'partner', 'Playa Caracol');
+    console.log('✅ Default users verified and active on startup (admin@mahana.com, caracol@playacaracol.com)');
   } catch (err) {
-    console.error('❌ FATAL: Failed to seed users:', err);
+    console.error('❌ FATAL: Failed to verify default users:', err);
   }
 
   // Verify email notification channel
