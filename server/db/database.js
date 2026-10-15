@@ -10,27 +10,31 @@ if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
 const DB_PATH = path.join(DB_DIR, 'mahana.db');
 const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
 
-// If running in Render with persistent disk /data, copy repo data if disk DB is new or empty
+// If running in Render with persistent disk /data, copy repo data if disk DB has fewer records or is empty
 if (DB_DIR === '/data' && fs.existsSync(LOCAL_DATA_DB)) {
   try {
     let shouldCopy = false;
     if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size < 1000) {
       shouldCopy = true;
     } else {
-      const tempDb = new Database(DB_PATH, { readonly: true });
-      const c = tempDb.prepare("SELECT COUNT(*) as n FROM sqlite_master WHERE type='table' AND name='reservas_tours'").get();
-      if (!c || c.n === 0) {
+      const diskDb = new Database(DB_PATH, { readonly: true });
+      const repoDb = new Database(LOCAL_DATA_DB, { readonly: true });
+      
+      const countDisk = diskDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get()?.total || 0;
+      const countRepo = repoDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get()?.total || 0;
+      
+      diskDb.close();
+      repoDb.close();
+      
+      console.log(`📊 DB Check on start: Disk (${countDisk} tours) vs Repo (${countRepo} tours)`);
+      if (countRepo > countDisk) {
         shouldCopy = true;
-      } else {
-        const countRows = tempDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get();
-        if (!countRows || countRows.total === 0) shouldCopy = true;
       }
-      tempDb.close();
     }
     if (shouldCopy) {
-      console.log('📦 Seeding /data/mahana.db with updated data from repository...');
+      console.log('📦 Updating /data/mahana.db with full dataset from repository...');
       fs.copyFileSync(LOCAL_DATA_DB, DB_PATH);
-      console.log('✅ /data/mahana.db successfully seeded from repository!');
+      console.log('✅ /data/mahana.db successfully updated from repository!');
     }
   } catch (seedErr) {
     console.error('⚠️ Warning checking persistent disk seed:', seedErr.message);
