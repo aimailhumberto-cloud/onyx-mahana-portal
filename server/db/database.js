@@ -22,12 +22,13 @@ if (DB_DIR === '/data' && fs.existsSync(LOCAL_DATA_DB)) {
       
       const countDisk = diskDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get()?.total || 0;
       const countRepo = repoDb.prepare("SELECT COUNT(*) as total FROM reservas_tours").get()?.total || 0;
+      const usersDisk = diskDb.prepare("SELECT COUNT(*) as total FROM usuarios").get()?.total || 0;
       
       diskDb.close();
       repoDb.close();
       
-      console.log(`📊 DB Check on start: Disk (${countDisk} tours) vs Repo (${countRepo} tours)`);
-      if (countRepo > countDisk) {
+      console.log(`📊 DB Check on start: Disk (${countDisk} tours, ${usersDisk} users) vs Repo (${countRepo} tours)`);
+      if (countRepo > countDisk || usersDisk === 0) {
         shouldCopy = true;
       }
     }
