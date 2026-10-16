@@ -105,12 +105,12 @@ router.post('/api/v1/auth/login', (req, res) => {
     const user = db.prepare('SELECT * FROM usuarios WHERE email = ? AND activo = 1').get(cleanEmail);
     if (!user) {
       console.warn(`[AUTH] Login failed: User not found or inactive for ${cleanEmail}`);
-      return error(res, 'AUTH_FAILED', 'Credenciales inválidas', 401);
+      return error(res, 'USER_NOT_FOUND', `Usuario no encontrado: ${cleanEmail}`, 401);
     }
 
     if (!verifyPassword(password, user.password_hash)) {
       console.warn(`[AUTH] Login failed: Password mismatch for ${cleanEmail}`);
-      return error(res, 'AUTH_FAILED', 'Credenciales inválidas', 401);
+      return error(res, 'PASSWORD_MISMATCH', 'Contraseña incorrecta', 401);
     }
 
     const token = generateToken(user);
